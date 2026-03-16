@@ -151,11 +151,11 @@ Gradio 前端当前支持：
 - 审稿结果
 - 历史记录回看
 ---
-![主界面](images\image1.png)
+![主界面](images/image1.png)
 ---
-![历史记录](images\image2.png)
+![历史记录](images/image2.png)
 ---
-![运行日志记录](images\image3.png)
+![运行日志记录](images/image3.png)
 ## PDF 分析的当前策略
 
 当前版本对 PDF 的处理是保守而实用的：
