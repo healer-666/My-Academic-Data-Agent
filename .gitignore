@@ -8,3 +8,4 @@ __pycache__/
 tool-output/test-temp/
 tool-output/tmp*/
 tool-output/debug-temp/
+outputs/
