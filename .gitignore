@@ -9,3 +9,5 @@ tool-output/test-temp/
 tool-output/tmp*/
 tool-output/debug-temp/
 outputs/
+tool-output/
+logs/
