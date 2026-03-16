@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Trace: s-20260313-210150-32c7</title>
+    <style>
+        body {
+            font-family: 'Consolas', 'Monaco', monospace;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            margin: 0;
+        }
+        .header {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .header h1 {
+            margin: 0 0 10px 0;
+            color: #4af626;
+        }
+        .stats-panel {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-item {
+            background: #1a1a1a;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 3px solid #4af626;
+        }
+        .stat-label {
+            display: block;
+            color: #888;
+            font-size: 12px;
+            margin-bottom: 5px;
+        }
+        .stat-value {
+            display: block;
+            color: #e0e0e0;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        .tool-stats {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        .tool-stats th, .tool-stats td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #333;
+        }
+        .tool-stats th {
+            color: #4af626;
+        }
+        .error-list {
+            list-style: none;
+            padding: 0;
+        }
+        .error-list li {
+            background: #331111;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            border-left: 3px solid #ff4444;
+        }
+        .events-container {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        .event {
+            border: 1px solid #333;
+            margin: 10px 0;
+            padding: 15px;
+            border-radius: 5px;
+            background: #1a1a1a;
+        }
+        .event-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .step {
+            color: #888;
+            font-size: 12px;
+        }
+        .timestamp {
+            color: #666;
+            font-size: 11px;
+        }
+        .event-type {
+            color: #4af626;
+            font-weight: bold;
+        }
+        .expandable {
+            cursor: pointer;
+            color: #4af626;
+            user-select: none;
+        }
+        .expandable:hover {
+            color: #6fff48;
+        }
+        .details {
+            display: none;
+            margin-top: 10px;
+            padding: 10px;
+            background: #0d0d0d;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .details pre {
+            margin: 0;
+            color: #e0e0e0;
+        }
+        .tool-call {
+            border-left: 3px solid #4af626;
+        }
+        .tool-result {
+            border-left: 3px solid #ffd700;
+        }
+        .error {
+            border-left: 3px solid #ff4444;
+            background: #2a1a1a;
+        }
+        .model-output {
+            border-left: 3px solid #00bfff;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔍 Trace Session: s-20260313-210150-32c7</h1>
+        <p>生成时间: 2026-03-13 21:01:50</p>
+    </div>
+
+    <div class="events-container">
+        <h2>📋 事件列表</h2>
+
+        <div class="event">
+            <div class="event-header">
+                <span class="step">Step -</span>
+                <span class="timestamp">2026-03-13T21:01:50.281087</span>
+                <span class="event-type">session_start</span>
+                <span class="expandable" onclick="toggleDetails('details-1')">[▼ 详情]</span>
+            </div>
+            <div id="details-1" class="details">
+                <pre>{
+  "agent_name": "高级数据分析师",
+  "agent_type": "ReActAgent",
+  "config": {
+    "default_model": "gpt-3.5-turbo",
+    "default_provider": "openai",
+    "temperature": 0.7,
+    "max_tokens": null,
+    "debug": false,
+    "log_level": "INFO",
+    "max_history_length": 100,
+    "context_window": 128000,
+    "compression_threshold": 0.8,
+    "min_retain_rounds": 10,
+    "enable_smart_compression": false,
+    "summary_llm_provider": "deepseek",
+    "summary_llm_model": "deepseek-chat",
+    "summary_max_tokens": 800,
+    "summary_temperature": 0.3,
+    "tool_output_max_lines": 2000,
+    "tool_output_max_bytes": 51200,
+    "tool_output_dir": "tool-output",
+    "tool_output_truncate_direction": "head",
+    "trace_enabled": true,
+    "trace_dir": "memory/traces",
+    "trace_sanitize": true,
+    "trace_html_include_raw_response": false,
+    "skills_enabled": true,
+    "skills_dir": "skills",
+    "skills_auto_register": true,
+    "circuit_enabled": true,
+    "circuit_failure_threshold": 3,
+    "circuit_recovery_timeout": 300,
+    "session_enabled": true,
+    "session_dir": "memory/sessions",
+    "auto_save_enabled": false,
+    "auto_save_interval": 10,
+    "subagent_enabled": true,
+    "subagent_max_steps": 15,
+    "subagent_use_light_llm": false,
+    "subagent_light_llm_provider": "deepseek",
+    "subagent_light_llm_model": "deepseek-chat",
+    "todowrite_enabled": true,
+    "todowrite_persistence_dir": "memory/todos",
+    "devlog_enabled": true,
+    "devlog_persistence_dir": "memory/devlogs",
+    "async_enabled": true,
+    "max_concurrent_tools": 3,
+    "hook_timeout_seconds": 5.0,
+    "llm_async_timeout": 120,
+    "tool_async_timeout": 30,
+    "stream_enabled": true,
+    "stream_buffer_size": 100,
+    "stream_include_thinking": true,
+    "stream_include_tool_calls": true
+  }
+}</pre>
+            </div>
+        </div>

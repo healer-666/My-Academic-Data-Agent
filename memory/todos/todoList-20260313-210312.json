@@ -1,0 +1,54 @@
+{
+  "summary": "分析居民消费价格指数数据集，生成专业数据分析报告",
+  "todos": [
+    {
+      "content": "加载并查看完整数据集结构",
+      "status": "pending",
+      "created_at": "2026-03-13T21:03:12.476158",
+      "updated_at": "2026-03-13T21:03:12.476158"
+    },
+    {
+      "content": "数据清洗和预处理",
+      "status": "pending",
+      "created_at": "2026-03-13T21:03:12.476158",
+      "updated_at": "2026-03-13T21:03:12.476158"
+    },
+    {
+      "content": "描述性统计分析",
+      "status": "pending",
+      "created_at": "2026-03-13T21:03:12.476158",
+      "updated_at": "2026-03-13T21:03:12.476158"
+    },
+    {
+      "content": "时间序列趋势分析",
+      "status": "pending",
+      "created_at": "2026-03-13T21:03:12.476158",
+      "updated_at": "2026-03-13T21:03:12.476158"
+    },
+    {
+      "content": "相关性分析和假设检验",
+      "status": "pending",
+      "created_at": "2026-03-13T21:03:12.476158",
+      "updated_at": "2026-03-13T21:03:12.476158"
+    },
+    {
+      "content": "可视化分析",
+      "status": "pending",
+      "created_at": "2026-03-13T21:03:12.476158",
+      "updated_at": "2026-03-13T21:03:12.476158"
+    },
+    {
+      "content": "撰写最终分析报告",
+      "status": "pending",
+      "created_at": "2026-03-13T21:03:12.476158",
+      "updated_at": "2026-03-13T21:03:12.476158"
+    }
+  ],
+  "created_at": "2026-03-13T21:03:12.476158",
+  "stats": {
+    "total": 7,
+    "completed": 0,
+    "in_progress": 0,
+    "pending": 7
+  }
+}
