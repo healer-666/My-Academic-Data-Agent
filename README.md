@@ -1,6 +1,5 @@
-# Academic-Data-Agent
-
 <div align="center">
+<h1>Academic-Data-Agent</h1>
 
 **面向科研与学术场景的数据分析 Agent 工作台**
 
@@ -8,10 +7,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](#)
 
 [特性](#-核心特性) • [架构](#-系统架构) • [快速开始](#-快速开始) • [使用指南](#-使用指南) • [项目结构](#-项目结构)
-
 </div>
-
----
 
 ## 📝 项目简介
 
