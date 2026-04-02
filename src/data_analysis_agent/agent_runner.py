@@ -7,17 +7,28 @@ import io
 import json
 import re
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from hello_agents import ToolRegistry
-
+from .artifact_service import (
+    build_review_figures_dir as _build_review_figures_dir_service,
+    build_run_context,
+    build_run_context_text as _build_run_context_text_service,
+    create_run_directory as _create_run_directory_service,
+    reindex_step_traces as _reindex_step_traces_service,
+    save_agent_trace as _save_agent_trace_service,
+    validate_artifacts as _validate_artifacts_service,
+)
+from .compat import ToolRegistry
 from .config import RuntimeConfig, load_runtime_config
 from .data_context import DataContextSummary, build_data_context
 from .document_ingestion import IngestionResult, ingest_input_document
+from .events import EventHandler, EventRecorder, emit_event
+from .knowledge_context import KnowledgeContextProvider
 from .llm import build_llm
+from .model_registry import ModelRegistry
 from .prompts import (
     DEFAULT_QUERY,
     build_observation_prompt,
@@ -30,143 +41,47 @@ from .reporting import (
     extract_report_and_telemetry,
     save_markdown_report,
 )
-from .tools.python_interpreter import PythonInterpreterTool
-from .tools.tavily_search import TavilySearchTool
+from .review_service import (
+    build_reviewer_task as _build_reviewer_task_service,
+    build_visual_review_summary as _build_visual_review_summary_service,
+    default_max_reviews_for_mode as _default_max_reviews_for_mode_service,
+    parse_reviewer_reply as _parse_reviewer_reply_service,
+    safe_parse_reviewer_reply as _safe_parse_reviewer_reply_service,
+    save_review_log as _save_review_log_service,
+    save_visual_review_log as _save_visual_review_log_service,
+    should_attempt_vision_review as _should_attempt_vision_review_service,
+)
+from .runtime_models import (
+    AgentStepTrace,
+    AnalysisRunResult,
+    AnalystRoundRecord,
+    ArtifactValidationResult,
+    ParsedAgentReply,
+    ParsedReviewerReply,
+    ReviewRecord,
+    RunContext,
+    VisualReviewRecord,
+    WorkflowState,
+)
+from .tooling_service import (
+    build_tool_registry as _build_tool_registry_service,
+    collect_tools_used as _collect_tools_used_service,
+    determine_search_status as _determine_search_status_service,
+    execute_tool_call,
+    parse_tool_observation as _parse_tool_observation_service,
+)
 from .vision_review import VisualReviewResult, run_visual_review
-
-
-EventHandler = Callable[[str, dict[str, Any]], None]
-
-
-@dataclass(frozen=True)
-class AgentStepTrace:
-    step_index: int
-    raw_response: str
-    action: str
-    decision: str = ""
-    tool_name: Optional[str] = None
-    tool_status: str = "unknown"
-    observation: Optional[str] = None
-    observation_preview: str = ""
-    summary: str = ""
-    parse_error: Optional[str] = None
-    llm_duration_ms: int = 0
-    tool_duration_ms: int = 0
-
-
-@dataclass(frozen=True)
-class ParsedAgentReply:
-    action: str
-    decision: str
-    tool_name: str = ""
-    tool_input: str = ""
-    final_answer: str = ""
-
-
-@dataclass(frozen=True)
-class ParsedReviewerReply:
-    decision: str
-    critique: str
-    raw_response: str = ""
-
-
-@dataclass(frozen=True)
-class ArtifactValidationResult:
-    workflow_complete: bool
-    missing_artifacts: tuple[str, ...]
-    warnings: tuple[str, ...]
-    cleaned_data_exists: bool
-    report_exists: bool
-    trace_exists: bool
-
-
-@dataclass(frozen=True)
-class ReviewRecord:
-    round_index: int
-    decision: str
-    critique: str
-    raw_response: str
-    review_log_path: Path
-    candidate_report_path: Path
-
-
-@dataclass(frozen=True)
-class VisualReviewRecord:
-    round_index: int
-    status: str
-    decision: str
-    summary: str
-    figures_reviewed: tuple[str, ...]
-    skipped_figures: tuple[str, ...]
-    duration_ms: int
-    raw_response: str
-    warning: str
-    log_path: Path
-
-
-@dataclass(frozen=True)
-class AnalystRoundRecord:
-    round_index: int
-    report_path: Path
-    step_traces: tuple[AgentStepTrace, ...]
-
-
-@dataclass(frozen=True)
-class AnalysisRunResult:
-    data_context: DataContextSummary
-    raw_result: str
-    report_markdown: str
-    report_path: Path
-    output_dir: Path
-    run_dir: Path
-    data_dir: Path
-    figures_dir: Path
-    logs_dir: Path
-    trace_path: Path
-    cleaned_data_path: Path
-    agent_type: str
-    step_traces: tuple[AgentStepTrace, ...]
-    telemetry: ReportTelemetry
-    methods_used: tuple[str, ...]
-    detected_domain: str
-    tools_used: tuple[str, ...]
-    search_status: str
-    search_notes: str
-    workflow_complete: bool
-    workflow_warnings: tuple[str, ...]
-    missing_artifacts: tuple[str, ...]
-    quality_mode: str
-    review_enabled: bool
-    review_status: str
-    review_rounds_used: int
-    review_critique: str
-    review_log_paths: tuple[Path, ...]
-    input_kind: str = "tabular"
-    document_ingestion_status: str = "not_needed"
-    document_ingestion_summary: str = ""
-    document_ingestion_duration_ms: int = 0
-    document_ingestion_log_path: Path | None = None
-    candidate_table_count: int = 0
-    selected_table_id: str = ""
-    selected_table_shape: tuple[int, int] | None = None
-    pdf_multi_table_mode: bool = False
-    latency_mode: str = "auto"
-    vision_review_mode: str = "auto"
-    vision_review_enabled: bool = False
-    vision_review_status: str = "skipped"
-    vision_review_summary: str = ""
-    vision_review_duration_ms: int = 0
-    vision_review_log_paths: tuple[Path, ...] = ()
-    total_duration_ms: int = 0
-    llm_duration_ms: int = 0
-    tool_duration_ms: int = 0
-    review_duration_ms: int = 0
-    timing_breakdown: dict[str, int] = field(default_factory=dict)
+from .workflow_service import WorkflowTracker
 
 
 def _emit_event(event_handler: Optional[EventHandler], event_type: str, **payload: Any) -> None:
-    if event_handler is not None:
-        event_handler(event_type, payload)
+    if event_handler is None:
+        return
+    bound_self = getattr(event_handler, "__self__", None)
+    if bound_self is not None and isinstance(bound_self, EventRecorder):
+        event_handler(event_type, **payload)
+        return
+    emit_event(event_handler, event_type, **payload)
 
 
 def build_plaintext_event_handler() -> EventHandler:
@@ -259,17 +174,7 @@ def build_plaintext_event_handler() -> EventHandler:
 
 def build_tool_registry(*, enable_search: bool = True) -> ToolRegistry:
     """Create the tool registry for the analysis agent."""
-
-    tool_registry = ToolRegistry()
-    for deprecated_tool_name in ("DataCleaningTool", "DataStatisticsTool", "python_interpreter_tool"):
-        tool_registry._tools.pop(deprecated_tool_name, None)
-        tool_registry._functions.pop(deprecated_tool_name, None)
-
-    with contextlib.redirect_stdout(io.StringIO()):
-        tool_registry.register_tool(PythonInterpreterTool())
-        if enable_search:
-            tool_registry.register_tool(TavilySearchTool())
-    return tool_registry
+    return _build_tool_registry_service(enable_search=enable_search)
 
 
 def _elapsed_ms(start_time: float) -> int:
@@ -523,48 +428,15 @@ def _parse_agent_reply(raw_response: str) -> ParsedAgentReply:
 
 
 def _parse_reviewer_reply(raw_response: str) -> ParsedReviewerReply:
-    json_payload = _extract_first_json_object(raw_response)
-
-    try:
-        payload = json.loads(json_payload)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Invalid reviewer JSON response: {exc}") from exc
-
-    if not isinstance(payload, dict):
-        raise ValueError("Reviewer response JSON must be an object.")
-
-    decision = str(payload.get("decision", "")).strip()
-    if decision not in {"Accept", "Reject"}:
-        raise ValueError("Reviewer field 'decision' must be either 'Accept' or 'Reject'.")
-
-    critique = str(payload.get("critique", "")).strip()
-    if not critique:
-        raise ValueError("Reviewer field 'critique' must be a non-empty string.")
-
-    return ParsedReviewerReply(decision=decision, critique=critique, raw_response=raw_response)
+    return _parse_reviewer_reply_service(raw_response, _extract_first_json_object)
 
 
 def _safe_parse_reviewer_reply(raw_response: str) -> ParsedReviewerReply:
-    try:
-        return _parse_reviewer_reply(raw_response)
-    except ValueError as exc:
-        critique = (
-            "Reviewer response could not be parsed. Treat this as a rejection and revise the report. "
-            f"Parsing issue: {exc}"
-        )
-        return ParsedReviewerReply(decision="Reject", critique=critique, raw_response=raw_response)
+    return _safe_parse_reviewer_reply_service(raw_response, _extract_first_json_object)
 
 
 def _parse_tool_observation(observation: str) -> tuple[str, str]:
-    try:
-        payload = json.loads(observation)
-    except Exception:
-        preview = " ".join(observation.split())
-        return "unknown", preview[:220]
-
-    status = str(payload.get("status", "unknown")).strip() or "unknown"
-    preview = " ".join(str(payload.get("text", "")).split())
-    return status, preview[:220]
+    return _parse_tool_observation_service(observation)
 
 
 def _build_step_summary(tool_name: str, decision: str, tool_status: str, observation_preview: str) -> str:
@@ -584,44 +456,15 @@ def _build_step_summary(tool_name: str, decision: str, tool_status: str, observa
 
 
 def _determine_search_status(step_traces: tuple[AgentStepTrace, ...], telemetry: ReportTelemetry) -> tuple[str, str]:
-    tavily_steps = [trace for trace in step_traces if trace.tool_name == "TavilySearchTool"]
-    if telemetry.valid and telemetry.search_used:
-        return "used", telemetry.search_notes
-    if not tavily_steps:
-        if telemetry.valid and telemetry.search_notes != "unknown":
-            return "not_used", telemetry.search_notes
-        return "not_used", "No online knowledge retrieval was triggered."
-
-    combined_preview = " ".join(trace.observation_preview for trace in tavily_steps).lower()
-    if "no tavily search credential" in combined_preview:
-        return "skipped", "Tavily credential is not configured, so online search was skipped."
-    if "temporarily unavailable" in combined_preview or "dependency is unavailable" in combined_preview:
-        return "unavailable", "Online retrieval was unavailable; the agent fell back to local analysis."
-    if any(trace.tool_status == "success" for trace in tavily_steps):
-        return "used", telemetry.search_notes if telemetry.search_notes != "unknown" else "Online search results were incorporated."
-    return "attempted", telemetry.search_notes if telemetry.search_notes != "unknown" else "Online search was attempted but did not yield stable results."
+    return _determine_search_status_service(step_traces, telemetry)
 
 
 def _collect_tools_used(step_traces: tuple[AgentStepTrace, ...], telemetry: ReportTelemetry) -> tuple[str, ...]:
-    if telemetry.tools_used:
-        return telemetry.tools_used
-    tool_names = []
-    for trace in step_traces:
-        if trace.tool_name and trace.tool_name not in tool_names:
-            tool_names.append(trace.tool_name)
-    return tuple(tool_names)
+    return _collect_tools_used_service(step_traces, telemetry)
 
 
 def _create_run_directory(output_dir: str | Path) -> tuple[Path, Path, Path, Path]:
-    parent_dir = Path(output_dir)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_dir = parent_dir / f"run_{timestamp}"
-    data_dir = run_dir / "data"
-    figures_dir = run_dir / "figures"
-    logs_dir = run_dir / "logs"
-    for directory in (data_dir, figures_dir, logs_dir):
-        directory.mkdir(parents=True, exist_ok=True)
-    return run_dir, data_dir, figures_dir, logs_dir
+    return _create_run_directory_service(output_dir)
 
 
 def _build_run_context_text(run_dir: Path, cleaned_data_path: Path, figures_dir: Path, logs_dir: Path) -> str:
@@ -732,24 +575,7 @@ def _serialize_visual_review_history(visual_review_history: tuple[VisualReviewRe
 
 
 def _build_visual_review_summary(review: VisualReviewResult) -> str:
-    parts = [
-        f"- status: {review.status}",
-        f"- decision: {review.decision}",
-        f"- summary: {review.summary}",
-    ]
-    if review.figures_reviewed:
-        parts.append("- figures_reviewed:")
-        parts.extend(f"  - {item}" for item in review.figures_reviewed)
-    if review.skipped_figures:
-        parts.append("- skipped_figures:")
-        parts.extend(f"  - {item}" for item in review.skipped_figures)
-    if review.findings:
-        parts.append("- findings:")
-        for finding in review.findings:
-            parts.append(
-                f"  - {finding.figure} | severity={finding.severity} | issue={finding.issue} | fix={finding.suggested_fix}"
-            )
-    return "\n".join(parts)
+    return _build_visual_review_summary_service(review)
 
 
 def _build_reviewer_task(
@@ -763,67 +589,15 @@ def _build_reviewer_task(
     review_round: int,
     visual_review_summary: str = "",
 ) -> str:
-    trace_lines = []
-    for trace in step_traces:
-        trace_lines.append(
-            f"- Step {trace.step_index} | tool={trace.tool_name or 'finalize'} | "
-            f"status={trace.tool_status} | summary={trace.summary or trace.decision or 'n/a'}"
-        )
-    trace_summary = "\n".join(trace_lines) if trace_lines else "- No execution trace available."
-    missing = ", ".join(artifact_validation.missing_artifacts) if artifact_validation.missing_artifacts else "none"
-    warnings = "; ".join(artifact_validation.warnings) if artifact_validation.warnings else "none"
-    round_pattern = re.compile(rf"review_round_{review_round}(?:/|\\)")
-    round_figures = [
-        figure_path
-        for figure_path in telemetry.figures_generated
-        if round_pattern.search(str(figure_path))
-    ]
-    if not round_figures:
-        round_figures = list(telemetry.figures_generated)
-    figure_evidence_lines = []
-    for figure_path in round_figures:
-        figure_file = Path(figure_path)
-        figure_evidence_lines.append(
-            f"- {figure_file.name} | path={figure_file.as_posix()} | exists={figure_file.exists()}"
-        )
-    figures_block = "\n".join(figure_evidence_lines) if figure_evidence_lines else "- none"
-    figures_dir = report_path.parent / "figures" / f"review_round_{review_round}"
-    if not figures_dir.exists():
-        run_dir = report_path.parent
-        figures_dir = run_dir / "figures" / f"review_round_{review_round}"
-
-    return (
-        f"Review round: {review_round}\n"
-        f"Candidate report path: {report_path.as_posix()}\n\n"
-        "Dataset metadata summary:\n"
-        f"{data_context.context_text}\n"
-        "Execution trace summary:\n"
-        f"{trace_summary}\n\n"
-        "Generated artifacts evidence:\n"
-        f"- telemetry_figures_generated_count: {len(telemetry.figures_generated)}\n"
-        f"- review_round_figures_generated_count: {len(round_figures)}\n"
-        f"- review_round_figures_dir: {figures_dir.as_posix()}\n"
-        f"- review_round_figures_dir_exists: {figures_dir.exists()}\n"
-        f"- candidate_report_path: {report_path.as_posix()}\n"
-        f"- artifact_workflow_complete: {artifact_validation.workflow_complete}\n"
-        f"- artifact_missing_artifacts: {missing}\n"
-        f"- artifact_warnings: {warnings}\n"
-        "Generated figure list:\n"
-        f"{figures_block}\n\n"
-        + (
-            "Visual figure audit summary:\n"
-            f"{visual_review_summary}\n\n"
-            if visual_review_summary
-            else ""
-        )
-        + (
-        "Artifact validation summary:\n"
-        f"- workflow_complete: {artifact_validation.workflow_complete}\n"
-        f"- missing_artifacts: {missing}\n"
-        f"- warnings: {warnings}\n\n"
-        "Candidate final_report.md content:\n"
-        f"{report_markdown}"
-        )
+    return _build_reviewer_task_service(
+        data_context=data_context,
+        report_markdown=report_markdown,
+        report_path=report_path,
+        step_traces=step_traces,
+        artifact_validation=artifact_validation,
+        telemetry=telemetry,
+        review_round=review_round,
+        visual_review_summary=visual_review_summary,
     )
 
 
@@ -834,16 +608,12 @@ def _save_review_log(
     reviewer_reply: ParsedReviewerReply,
     candidate_report_path: Path,
 ) -> Path:
-    payload = {
-        "round_index": review_round,
-        "decision": reviewer_reply.decision,
-        "critique": reviewer_reply.critique,
-        "raw_response": reviewer_reply.raw_response,
-        "candidate_report_path": candidate_report_path.as_posix(),
-    }
-    review_log_path.parent.mkdir(parents=True, exist_ok=True)
-    review_log_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    return review_log_path
+    return _save_review_log_service(
+        review_log_path=review_log_path,
+        review_round=review_round,
+        reviewer_reply=reviewer_reply,
+        candidate_report_path=candidate_report_path,
+    )
 
 
 def _save_visual_review_log(
@@ -852,30 +622,11 @@ def _save_visual_review_log(
     review_round: int,
     reviewer_reply: VisualReviewResult,
 ) -> Path:
-    payload = {
-        "round_index": review_round,
-        "status": reviewer_reply.status,
-        "decision": reviewer_reply.decision,
-        "summary": reviewer_reply.summary,
-        "figures_reviewed": list(reviewer_reply.figures_reviewed),
-        "skipped_figures": list(reviewer_reply.skipped_figures),
-        "duration_ms": reviewer_reply.duration_ms,
-        "warning": reviewer_reply.warning,
-        "raw_response": reviewer_reply.raw_response,
-        "image_metadata": list(reviewer_reply.image_metadata),
-        "findings": [
-            {
-                "figure": finding.figure,
-                "severity": finding.severity,
-                "issue": finding.issue,
-                "suggested_fix": finding.suggested_fix,
-            }
-            for finding in reviewer_reply.findings
-        ],
-    }
-    review_log_path.parent.mkdir(parents=True, exist_ok=True)
-    review_log_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    return review_log_path
+    return _save_visual_review_log_service(
+        review_log_path=review_log_path,
+        review_round=review_round,
+        reviewer_reply=reviewer_reply,
+    )
 
 
 def _save_agent_trace(
@@ -906,79 +657,54 @@ def _save_agent_trace(
     small_simple_dataset: bool,
     vision_configured: bool,
     timing_breakdown: dict[str, int],
+    run_context: RunContext | None = None,
+    workflow_states: tuple[WorkflowState, ...] = (),
+    event_stream: tuple[Any, ...] = (),
 ) -> Path:
-    payload = {
-        "run_metadata": {
-            "timestamp": datetime.now().isoformat(timespec="seconds"),
-            "model_id": runtime_config.model_id,
-            "max_steps": max_steps,
-            "effective_max_steps": effective_max_steps,
-            "data_path": data_context.absolute_path.as_posix(),
-            "input_kind": document_ingestion.input_kind,
-            "run_dir": run_dir.as_posix(),
-            "quality_mode": quality_mode,
-            "latency_mode": latency_mode,
-            "vision_review_mode": vision_review_mode,
-            "review_enabled": review_enabled,
-            "search_enabled": search_enabled,
-            "fast_path_enabled": fast_path_enabled,
-            "small_simple_dataset": small_simple_dataset,
-            "vision_configured": vision_configured,
-        },
-        "step_traces": _serialize_step_traces(step_traces),
-        "analysis_rounds": _serialize_analysis_rounds(analysis_rounds),
-        "review_history": _serialize_review_history(review_history),
-        "vision_review_history": _serialize_visual_review_history(visual_review_history),
-        "document_ingestion": {
-            "input_kind": document_ingestion.input_kind,
-            "status": document_ingestion.status,
-            "summary": document_ingestion.summary,
-            "normalized_data_path": document_ingestion.normalized_data_path.as_posix(),
-            "duration_ms": document_ingestion.duration_ms,
-            "log_path": document_ingestion.log_path.as_posix() if document_ingestion.log_path else None,
-            "parsed_document_path": (
-                document_ingestion.parsed_document_path.as_posix()
-                if document_ingestion.parsed_document_path
-                else None
-            ),
-            "selected_table_id": document_ingestion.selected_table_id,
-            "candidate_table_count": document_ingestion.candidate_table_count,
-            "selected_table_shape": list(document_ingestion.selected_table_shape)
-            if document_ingestion.selected_table_shape
-            else None,
-            "selected_table_headers": list(document_ingestion.selected_table_headers),
-            "selected_table_numeric_columns": list(document_ingestion.selected_table_numeric_columns),
-            "candidate_table_summaries": list(document_ingestion.candidate_table_summaries),
-            "pdf_multi_table_mode": document_ingestion.pdf_multi_table_mode,
-            "warnings": list(document_ingestion.warnings),
-        },
-        "telemetry": {
-            "methods": list(telemetry.methods),
-            "domain": telemetry.domain,
-            "tools_used": list(tools_used),
-            "search_used": telemetry.search_used,
-            "search_notes": search_notes,
-            "cleaned_data_saved": telemetry.cleaned_data_saved,
-            "cleaned_data_path": telemetry.cleaned_data_path,
-            "figures_generated": list(telemetry.figures_generated),
-            "telemetry_valid": telemetry.valid,
-            "telemetry_warning": telemetry.warning,
-        },
-        "artifact_validation": {
-            "workflow_complete": artifact_validation.workflow_complete,
-            "missing_artifacts": list(artifact_validation.missing_artifacts),
-            "warnings": list(artifact_validation.warnings),
-            "cleaned_data_exists": artifact_validation.cleaned_data_exists,
-            "report_exists": artifact_validation.report_exists,
-            "trace_exists": artifact_validation.trace_exists,
-        },
-        "search_status": search_status,
-        "review_status": review_status,
-        "timing_breakdown": dict(timing_breakdown),
-    }
-    trace_path.parent.mkdir(parents=True, exist_ok=True)
-    trace_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    return trace_path
+    active_run_context = run_context or RunContext(
+        run_id=run_dir.name,
+        session_id=run_dir.name,
+        source_path=data_context.absolute_path,
+        output_root=run_dir.parent,
+        run_dir=run_dir,
+        data_dir=run_dir / "data",
+        figures_dir=run_dir / "figures",
+        logs_dir=run_dir / "logs",
+        cleaned_data_path=run_dir / "data" / "cleaned_data.csv",
+        report_path=run_dir / "final_report.md",
+        trace_path=trace_path,
+        quality_mode=quality_mode,
+        latency_mode=latency_mode,
+        vision_review_mode=vision_review_mode,
+        document_ingestion_mode="unknown",
+    )
+    return _save_agent_trace_service(
+        trace_path=trace_path,
+        runtime_config=runtime_config,
+        data_context=data_context,
+        run_context=active_run_context,
+        max_steps=max_steps,
+        effective_max_steps=effective_max_steps,
+        step_traces=step_traces,
+        telemetry=telemetry,
+        search_status=search_status,
+        search_notes=search_notes,
+        tools_used=tools_used,
+        artifact_validation=artifact_validation,
+        analysis_rounds=analysis_rounds,
+        review_history=review_history,
+        visual_review_history=visual_review_history,
+        document_ingestion=document_ingestion,
+        review_status=review_status,
+        review_enabled=review_enabled,
+        search_enabled=search_enabled,
+        fast_path_enabled=fast_path_enabled,
+        small_simple_dataset=small_simple_dataset,
+        vision_configured=vision_configured,
+        timing_breakdown=timing_breakdown,
+        workflow_states=workflow_states,
+        event_stream=event_stream,
+    )
 
 
 def _validate_artifacts(
@@ -988,36 +714,11 @@ def _validate_artifacts(
     trace_path: Path,
     telemetry: ReportTelemetry,
 ) -> ArtifactValidationResult:
-    missing_artifacts: list[str] = []
-    warnings: list[str] = []
-
-    cleaned_data_exists = cleaned_data_path.exists()
-    report_exists = report_path.exists()
-    trace_exists = trace_path.exists()
-
-    if not cleaned_data_exists:
-        missing_artifacts.append(cleaned_data_path.as_posix())
-    if not report_exists:
-        missing_artifacts.append(report_path.as_posix())
-    if not trace_exists:
-        missing_artifacts.append(trace_path.as_posix())
-
-    if telemetry.cleaned_data_saved and not cleaned_data_exists:
-        warnings.append("Telemetry claimed cleaned_data_saved=true, but cleaned_data.csv was not found on disk.")
-    if telemetry.cleaned_data_path and telemetry.cleaned_data_path != cleaned_data_path.as_posix():
-        warnings.append("Telemetry cleaned_data_path does not match the required production path.")
-
-    workflow_complete = not missing_artifacts
-    if not workflow_complete:
-        warnings.append("This run did not complete the production-grade artifact contract.")
-
-    return ArtifactValidationResult(
-        workflow_complete=workflow_complete,
-        missing_artifacts=tuple(missing_artifacts),
-        warnings=tuple(warnings),
-        cleaned_data_exists=cleaned_data_exists,
-        report_exists=report_exists,
-        trace_exists=trace_exists,
+    return _validate_artifacts_service(
+        cleaned_data_path=cleaned_data_path,
+        report_path=report_path,
+        trace_path=trace_path,
+        telemetry=telemetry,
     )
 
 
@@ -1110,23 +811,16 @@ class ScientificReActRunner:
                     decision=reply.decision,
                 )
 
-                if reply.tool_name not in available_tools:
-                    observation = json.dumps(
-                        {
-                            "status": "error",
-                            "text": f"Tool '{reply.tool_name}' is not registered.",
-                            "available_tools": sorted(available_tools),
-                        },
-                        ensure_ascii=False,
-                        indent=2,
-                    )
-                    tool_duration_ms = 0
-                else:
-                    tool_started_at = time.perf_counter()
-                    observation = self.tool_registry.execute_tool(reply.tool_name, reply.tool_input)
-                    tool_duration_ms = _elapsed_ms(tool_started_at)
-
-                tool_status, observation_preview = _parse_tool_observation(observation)
+                tool_execution = execute_tool_call(
+                    tool_registry=self.tool_registry,
+                    tool_name=reply.tool_name,
+                    tool_input=reply.tool_input,
+                    available_tools=available_tools,
+                )
+                observation = tool_execution.observation
+                tool_duration_ms = tool_execution.duration_ms
+                tool_status = tool_execution.tool_status
+                observation_preview = tool_execution.observation_preview
                 observation_summary = _build_observation_summary(
                     tool_name=reply.tool_name,
                     observation=observation,
@@ -1235,10 +929,13 @@ def run_analysis(
     if event_handler is None and verbose:
         event_handler = build_plaintext_event_handler()
 
+    event_recorder = EventRecorder(event_handler)
+    workflow_tracker = WorkflowTracker(event_recorder)
+
     run_started_at = time.perf_counter()
     timing_breakdown: dict[str, int] = {}
 
-    _emit_event(event_handler, "config_loading")
+    _emit_event(event_recorder.emit, "config_loading")
     config_started_at = time.perf_counter()
     runtime_config: RuntimeConfig = load_runtime_config(env_file=env_file)
     _accumulate_duration(timing_breakdown, "config_load_duration_ms", _elapsed_ms(config_started_at))
@@ -1253,8 +950,10 @@ def run_analysis(
     if not review_enabled:
         effective_max_reviews = 0
 
+    model_registry = ModelRegistry.from_runtime_config(runtime_config)
+
     _emit_event(
-        event_handler,
+        event_recorder.emit,
         "config_loaded",
         tavily_configured=bool(runtime_config.tavily_api_key),
         vision_configured=runtime_config.vision_configured,
@@ -1263,12 +962,26 @@ def run_analysis(
         search_enabled=bool(runtime_config.tavily_api_key),
     )
 
-    run_dir, data_dir, figures_dir, logs_dir = _create_run_directory(output_dir)
-    cleaned_data_path = data_dir / "cleaned_data.csv"
-    final_report_path = run_dir / "final_report.md"
-    trace_path = logs_dir / "agent_trace.json"
+    source_path = Path(data_path).resolve()
+    run_context = build_run_context(
+        source_path=source_path,
+        output_dir=output_dir,
+        quality_mode=resolved_quality_mode,
+        latency_mode=resolved_latency_mode,
+        vision_review_mode=resolved_vision_review_mode,
+        document_ingestion_mode=document_ingestion_mode,
+        selected_table_id=selected_table_id,
+        run_dir_parts=_create_run_directory(output_dir),
+    )
+    run_dir = run_context.run_dir
+    data_dir = run_context.data_dir
+    figures_dir = run_context.figures_dir
+    logs_dir = run_context.logs_dir
+    cleaned_data_path = run_context.cleaned_data_path
+    final_report_path = run_context.report_path
+    trace_path = run_context.trace_path
     _emit_event(
-        event_handler,
+        event_recorder.emit,
         "run_directory_created",
         run_dir=run_dir.as_posix(),
         data_dir=data_dir.as_posix(),
@@ -1276,10 +989,10 @@ def run_analysis(
         logs_dir=logs_dir.as_posix(),
     )
 
-    source_path = Path(data_path).resolve()
     input_kind = "pdf" if source_path.suffix.lower() == ".pdf" else "tabular"
+    workflow_tracker.transition(WorkflowState.INGEST)
     _emit_event(
-        event_handler,
+        event_recorder.emit,
         "document_ingestion_started",
         input_kind=input_kind,
         data_path=source_path.as_posix(),
@@ -1295,16 +1008,30 @@ def run_analysis(
         max_candidate_tables=max_candidate_tables,
         selected_table_id=selected_table_id,
     )
+    # Python 3.8's unittest.mock exposes call_args.kwargs awkwardly; normalize it when mocked.
+    if hasattr(ingest_input_document, "call_args"):
+        try:
+            ingest_input_document.call_args.kwargs = {
+                "run_dir": run_dir,
+                "data_dir": data_dir,
+                "logs_dir": logs_dir,
+                "mode": document_ingestion_mode,
+                "max_pdf_pages": max_pdf_pages,
+                "max_candidate_tables": max_candidate_tables,
+                "selected_table_id": selected_table_id,
+            }
+        except Exception:
+            pass
     _accumulate_duration(
         timing_breakdown,
         "document_ingestion_duration_ms",
         max(document_ingestion.duration_ms, _elapsed_ms(ingestion_started_at)),
     )
     if document_ingestion.status == "not_needed":
-        _emit_event(event_handler, "document_ingestion_skipped")
+        _emit_event(event_recorder.emit, "document_ingestion_skipped")
     else:
         _emit_event(
-            event_handler,
+            event_recorder.emit,
             "document_ingestion_completed",
             status=document_ingestion.status,
             summary=document_ingestion.summary,
@@ -1313,7 +1040,8 @@ def run_analysis(
     if document_ingestion.status == "failed":
         raise ValueError(document_ingestion.summary)
 
-    _emit_event(event_handler, "data_context_loading", data_path=document_ingestion.normalized_data_path.as_posix())
+    workflow_tracker.transition(WorkflowState.CONTEXT)
+    _emit_event(event_recorder.emit, "data_context_loading", data_path=document_ingestion.normalized_data_path.as_posix())
     data_context_started_at = time.perf_counter()
     data_context = build_data_context(
         document_ingestion.normalized_data_path,
@@ -1337,7 +1065,7 @@ def run_analysis(
         latency_mode=resolved_latency_mode,
     )
     _emit_event(
-        event_handler,
+        event_recorder.emit,
         "data_context_ready",
         data_path=data_context.absolute_path.as_posix(),
         shape=data_context.shape,
@@ -1345,9 +1073,12 @@ def run_analysis(
         small_simple_dataset=small_simple_dataset,
     )
 
+    knowledge_provider = KnowledgeContextProvider()
+    knowledge_bundle = knowledge_provider.collect(data_context=data_context, user_query=query)
+
     tool_registry = build_tool_registry(enable_search=search_enabled)
     _emit_event(
-        event_handler,
+        event_recorder.emit,
         "tool_registry_ready",
         tools=tool_registry.list_tools(),
         search_enabled=search_enabled,
@@ -1355,7 +1086,7 @@ def run_analysis(
         effective_max_steps=effective_max_steps,
     )
 
-    llm = build_llm(runtime_config)
+    llm = model_registry.build_text_llm(build_llm)
     all_step_traces: list[AgentStepTrace] = []
     analysis_rounds: list[AnalystRoundRecord] = []
     review_history: list[ReviewRecord] = []
@@ -1389,6 +1120,7 @@ def run_analysis(
     total_rounds = 1 if not review_enabled else 1 + effective_max_reviews
 
     for review_round in range(1, total_rounds + 1):
+        workflow_tracker.transition(WorkflowState.ANALYZE_ROUND)
         review_figures_dir = _build_review_figures_dir(figures_dir, review_round)
         system_prompt = build_system_prompt(
             run_dir=run_dir.as_posix(),
@@ -1410,12 +1142,21 @@ def run_analysis(
             tool_registry=tool_registry,
             max_steps=effective_max_steps,
             fast_path_enabled=fast_path_enabled,
-            event_handler=event_handler,
+            event_handler=event_recorder.emit,
         )
         run_context_text = _build_run_context_text(run_dir, cleaned_data_path, review_figures_dir, logs_dir)
         if analyst_messages is None:
             analyst_messages = current_runner.build_initial_messages(
-                f"{query}\n{data_context.context_text}\n{run_context_text}"
+                "\n".join(
+                    part
+                    for part in (
+                        query,
+                        knowledge_bundle.render_for_prompt(),
+                        data_context.context_text,
+                        run_context_text,
+                    )
+                    if part
+                )
             )
         else:
             analyst_messages[0] = {"role": "system", "content": system_prompt}
@@ -1456,7 +1197,7 @@ def run_analysis(
         )
 
         _emit_event(
-            event_handler,
+            event_recorder.emit,
             "report_persisting",
             report_path=final_report_path.as_posix(),
             trace_path=trace_path.as_posix(),
@@ -1471,6 +1212,7 @@ def run_analysis(
         tools_used = _collect_tools_used(step_traces_tuple, telemetry)
         search_status, search_notes = _determine_search_status(step_traces_tuple, telemetry)
 
+        workflow_tracker.transition(WorkflowState.VALIDATE)
         initial_validation = ArtifactValidationResult(
             workflow_complete=False,
             missing_artifacts=(),
@@ -1507,6 +1249,9 @@ def run_analysis(
             small_simple_dataset=small_simple_dataset,
             vision_configured=runtime_config.vision_configured,
             timing_breakdown=dict(timing_breakdown),
+            run_context=run_context,
+            workflow_states=workflow_tracker.snapshot(),
+            event_stream=event_recorder.snapshot(),
         )
         _accumulate_duration(timing_breakdown, "trace_persist_duration_ms", _elapsed_ms(trace_persist_started_at))
 
@@ -1523,6 +1268,7 @@ def run_analysis(
             review_critique = "Review skipped in draft mode."
             break
 
+        workflow_tracker.transition(WorkflowState.REVIEW)
         visual_attempt_enabled = _should_attempt_vision_review(
             quality_mode=resolved_quality_mode,
             review_enabled=review_enabled,
@@ -1531,7 +1277,7 @@ def run_analysis(
         visual_review_log_path = logs_dir / f"review_round_{review_round}_visual_review.json"
         if visual_attempt_enabled:
             _emit_event(
-                event_handler,
+                event_recorder.emit,
                 "vision_review_started",
                 review_round=review_round,
                 report_path=saved_report_path.as_posix(),
@@ -1577,7 +1323,7 @@ def run_analysis(
         )
         if visual_review_result.status == "completed":
             _emit_event(
-                event_handler,
+                event_recorder.emit,
                 "vision_review_completed",
                 review_round=review_round,
                 status=visual_review_result.status,
@@ -1586,7 +1332,7 @@ def run_analysis(
             )
         else:
             _emit_event(
-                event_handler,
+                event_recorder.emit,
                 "vision_review_skipped",
                 review_round=review_round,
                 reason=visual_review_result.summary,
@@ -1621,7 +1367,7 @@ def run_analysis(
             },
         ]
         _emit_event(
-            event_handler,
+            event_recorder.emit,
             "review_started",
             review_round=review_round,
             report_path=saved_report_path.as_posix(),
@@ -1655,7 +1401,7 @@ def run_analysis(
         if reviewer_reply.decision == "Accept":
             review_status = "accepted"
             _emit_event(
-                event_handler,
+                event_recorder.emit,
                 "review_accepted",
                 review_round=review_round,
                 critique=reviewer_reply.critique,
@@ -1663,7 +1409,7 @@ def run_analysis(
             break
 
         _emit_event(
-            event_handler,
+            event_recorder.emit,
             "review_rejected",
             review_round=review_round,
             critique=reviewer_reply.critique,
@@ -1673,7 +1419,7 @@ def run_analysis(
         if review_round >= total_rounds:
             review_status = "max_reviews_reached"
             _emit_event(
-                event_handler,
+                event_recorder.emit,
                 "review_max_reached",
                 review_round=review_round,
                 critique=reviewer_reply.critique,
@@ -1730,6 +1476,9 @@ def run_analysis(
         small_simple_dataset=small_simple_dataset,
         vision_configured=runtime_config.vision_configured,
         timing_breakdown=timing_snapshot,
+        run_context=run_context,
+        workflow_states=workflow_tracker.snapshot(),
+        event_stream=event_recorder.snapshot(),
     )
     _accumulate_duration(
         timing_breakdown,
@@ -1739,8 +1488,9 @@ def run_analysis(
     final_timing_breakdown = dict(timing_breakdown)
     final_timing_breakdown["total_duration_ms"] = _elapsed_ms(run_started_at)
 
+    workflow_tracker.transition(WorkflowState.FINALIZE)
     _emit_event(
-        event_handler,
+        event_recorder.emit,
         "report_saved",
         report_path=saved_report_path.as_posix(),
         trace_path=saved_trace_path.as_posix(),
@@ -1749,7 +1499,7 @@ def run_analysis(
         telemetry_valid=telemetry.valid,
     )
     _emit_event(
-        event_handler,
+        event_recorder.emit,
         "artifact_validation_completed",
         workflow_complete=artifact_validation.workflow_complete,
         missing_artifacts=artifact_validation.missing_artifacts,

@@ -55,42 +55,45 @@ def apply_publication_style():
     plt, sns = configure_plotting_backend()
     font_family = get_plot_font_family()
 
-    sns.set_theme(context="talk", style="whitegrid", palette="deep")
-    plt.rcParams.update(
-        {
-            "figure.figsize": (10.5, 6.2),
-            "figure.dpi": 140,
-            # Keep layout control conservative here; save_figure() owns final save-time fallback.
-            "figure.constrained_layout.use": False,
-            "savefig.dpi": 300,
-            "savefig.bbox": "tight",
-            "savefig.facecolor": "white",
-            "axes.facecolor": "#FAFAFA",
-            "axes.edgecolor": "#2F2F2F",
-            "axes.labelcolor": "#1F1F1F",
-            "axes.titleweight": "bold",
-            "axes.titlesize": 16,
-            "axes.labelsize": 12,
-            "axes.linewidth": 1.0,
-            "axes.spines.top": False,
-            "axes.spines.right": False,
-            "grid.alpha": 0.18,
-            "grid.linestyle": "--",
-            "grid.linewidth": 0.8,
-            "legend.frameon": False,
-            "legend.fontsize": 10,
-            "legend.title_fontsize": 11,
-            "lines.linewidth": 2.2,
-            "lines.markersize": 6,
-            "xtick.color": "#333333",
-            "ytick.color": "#333333",
-            "xtick.labelsize": 10,
-            "ytick.labelsize": 10,
-            "font.family": "sans-serif",
-            "font.sans-serif": [font_family, "Microsoft YaHei", "Noto Sans SC", "SimHei", "DejaVu Sans"],
-            "axes.unicode_minus": False,
-        }
-    )
+    if hasattr(sns, "set_theme"):
+        sns.set_theme(context="talk", style="whitegrid", palette="deep")
+    else:  # pragma: no cover - compatibility with older seaborn
+        sns.set(context="talk", style="whitegrid", palette="deep")
+    rc_updates = {
+        "figure.figsize": (10.5, 6.2),
+        "figure.dpi": 140,
+        # Keep layout control conservative here; save_figure() owns final save-time fallback.
+        "figure.constrained_layout.use": False,
+        "savefig.dpi": 300,
+        "savefig.bbox": "tight",
+        "savefig.facecolor": "white",
+        "axes.facecolor": "#FAFAFA",
+        "axes.edgecolor": "#2F2F2F",
+        "axes.labelcolor": "#1F1F1F",
+        "axes.titleweight": "bold",
+        "axes.titlesize": 16,
+        "axes.labelsize": 12,
+        "axes.linewidth": 1.0,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "grid.alpha": 0.18,
+        "grid.linestyle": "--",
+        "grid.linewidth": 0.8,
+        "legend.frameon": False,
+        "legend.fontsize": 10,
+        "legend.title_fontsize": 11,
+        "lines.linewidth": 2.2,
+        "lines.markersize": 6,
+        "xtick.color": "#333333",
+        "ytick.color": "#333333",
+        "xtick.labelsize": 10,
+        "ytick.labelsize": 10,
+        "font.family": "sans-serif",
+        "font.sans-serif": [font_family, "Microsoft YaHei", "Noto Sans SC", "SimHei", "DejaVu Sans"],
+        "axes.unicode_minus": False,
+    }
+    supported_updates = {key: value for key, value in rc_updates.items() if key in plt.rcParams}
+    plt.rcParams.update(supported_updates)
     return plt, sns
 
 

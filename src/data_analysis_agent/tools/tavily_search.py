@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, List
 
-from hello_agents.tools import Tool, ToolParameter
+from ..compat import Tool, ToolParameter
 
 from ..tool_protocol import ToolErrorCode, ToolResponse
 

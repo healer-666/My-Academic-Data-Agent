@@ -7,8 +7,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-import tiktoken
-from dotenv import load_dotenv
+try:
+    import tiktoken
+except Exception:  # pragma: no cover - dependency-light test environments
+    tiktoken = None
+
+try:
+    from dotenv import load_dotenv
+except Exception:  # pragma: no cover - dependency-light test environments
+    def load_dotenv(*args, **kwargs):
+        return False
 
 
 _TOKEN_PATCH_APPLIED = False
@@ -41,6 +49,8 @@ def _patched_get_encoding(self):
     model_name = str(getattr(self, "model", "") or "").strip().lower()
 
     try:
+        if tiktoken is None:
+            return None
         if model_name and any(model_name.startswith(prefix) for prefix in _SAFE_TIKTOKEN_MODEL_PREFIXES):
             return tiktoken.encoding_for_model(model_name)
         return tiktoken.get_encoding("cl100k_base")

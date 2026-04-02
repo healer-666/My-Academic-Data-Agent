@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from hello_agents import HelloAgentsLLM
+from .compat import HelloAgentsLLM
 
 from .config import RuntimeConfig
 

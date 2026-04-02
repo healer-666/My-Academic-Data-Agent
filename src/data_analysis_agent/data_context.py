@@ -36,6 +36,10 @@ def _read_dataframe(data_path: Path) -> pd.DataFrame:
     if suffix == ".csv":
         return pd.read_csv(data_path)
     if suffix in {".xls", ".xlsx"}:
+        if not data_path.exists() and suffix == ".xls":
+            fallback = data_path.with_suffix(".xlsx")
+            if fallback.exists():
+                data_path = fallback
         return pd.read_excel(data_path)
     raise ValueError(f"Unsupported data file format: {data_path.suffix}")
 
@@ -171,7 +175,10 @@ def build_data_context(
     columns = df.columns.tolist()
     dtypes = df.dtypes.to_string()
     shape = df.shape
-    head_markdown = df.head().to_markdown(index=False)
+    try:
+        head_markdown = df.head().to_markdown(index=False)
+    except Exception:
+        head_markdown = df.head().to_string(index=False)
 
     sample_size_warning = ""
     small_sample_warning = shape[0] < 30

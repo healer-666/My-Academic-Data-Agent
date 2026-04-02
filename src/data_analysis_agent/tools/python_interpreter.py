@@ -13,7 +13,7 @@ from typing import Any, Dict, List
 
 import numpy as np
 import pandas as pd
-from hello_agents.tools import Tool, ToolParameter
+from ..compat import Tool, ToolParameter
 
 from ..plotting import (
     apply_publication_style,
