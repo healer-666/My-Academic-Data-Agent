@@ -168,7 +168,9 @@ def save_agent_trace(
     timing_breakdown: dict[str, int],
     workflow_states: tuple[WorkflowState, ...] = (),
     event_stream: tuple[AgentEvent, ...] = (),
+    rag_payload: dict[str, object] | None = None,
 ) -> Path:
+    active_rag_payload = dict(rag_payload or {})
     payload = {
         "run_metadata": {
             "timestamp": datetime.now().isoformat(timespec="seconds"),
@@ -189,6 +191,8 @@ def save_agent_trace(
             "fast_path_enabled": fast_path_enabled,
             "small_simple_dataset": small_simple_dataset,
             "vision_configured": vision_configured,
+            "rag_enabled": bool(active_rag_payload.get("enabled", False)),
+            "rag_status": str(active_rag_payload.get("status", "disabled")),
         },
         "workflow_states": [state.value if isinstance(state, WorkflowState) else str(state) for state in workflow_states],
         "event_stream": [event.to_dict() for event in event_stream],
@@ -249,6 +253,7 @@ def save_agent_trace(
         "search_status": search_status,
         "review_status": review_status,
         "timing_breakdown": dict(timing_breakdown),
+        "rag": active_rag_payload,
     }
     trace_path.parent.mkdir(parents=True, exist_ok=True)
     trace_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")

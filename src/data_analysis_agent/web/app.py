@@ -386,6 +386,19 @@ def build_demo():
                         ],
                         value="auto",
                     )
+                    if hasattr(gradio, "Checkbox"):
+                        use_rag = gradio.Checkbox(label="启用本地 RAG 知识增强", value=True)
+                    else:  # pragma: no cover - lightweight fake gradio in tests
+                        use_rag = gradio.Dropdown(
+                            label="启用本地 RAG 知识增强",
+                            choices=[("开启", True), ("关闭", False)],
+                            value=True,
+                        )
+                    knowledge_uploads = gradio.File(
+                        label="知识文档（可选，可多选）",
+                        file_count="multiple",
+                        file_types=[".txt", ".md", ".pdf"],
+                    )
                     preview_pdf_button = gradio.Button("预览候选表", variant="secondary")
                     selected_table_id = gradio.Dropdown(
                         label="主表选择",
@@ -535,6 +548,8 @@ def build_demo():
                 agent_name,
                 env_file,
                 session_label,
+                knowledge_uploads,
+                use_rag,
             ],
             outputs=[
                 status,

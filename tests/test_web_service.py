@@ -248,6 +248,47 @@ class WebServiceTests(unittest.TestCase):
         self.assertTrue(str(final_output[9]).endswith("agent_trace.json"))
         self.assertTrue(str(final_output[10]).endswith(".zip"))
 
+    def test_stream_analysis_session_passes_knowledge_uploads_and_rag_toggle(self):
+        case_dir = self._workspace_case_dir()
+        upload = case_dir / "sample.csv"
+        upload.write_text("a,b\n1,2\n", encoding="utf-8")
+        knowledge = case_dir / "glossary.md"
+        knowledge.write_text("Domain glossary.", encoding="utf-8")
+        result = self._build_result(case_dir / "outputs" / "run_demo_rag")
+
+        def fake_run_analysis(*args, **kwargs):
+            self.assertFalse(kwargs["use_rag"])
+            self.assertEqual(len(kwargs["knowledge_paths"]), 1)
+            self.assertTrue(str(kwargs["knowledge_paths"][0]).endswith("glossary.md"))
+            return result
+
+        with patch("data_analysis_agent.web.service.run_analysis", side_effect=fake_run_analysis):
+            outputs = list(
+                stream_analysis_session(
+                    upload.as_posix(),
+                    "demo query",
+                    "standard",
+                    "auto",
+                    "auto",
+                    "auto",
+                    6,
+                    1,
+                    20,
+                    5,
+                    3,
+                    1024,
+                    "table_02",
+                    (case_dir / "outputs").as_posix(),
+                    "Advanced Data Analyst",
+                    "",
+                    "demo-session",
+                    [knowledge.as_posix()],
+                    False,
+                )
+            )
+
+        self.assertIn("运行完成", outputs[-1][0])
+
 
 if __name__ == "__main__":
     unittest.main()

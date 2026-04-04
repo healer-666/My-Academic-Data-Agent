@@ -44,6 +44,21 @@ class ConfigTests(unittest.TestCase):
 
         self.assertFalse(config.vision_configured)
 
+    def test_load_runtime_config_marks_embedding_as_configured_when_complete(self):
+        env = {
+            "LLM_MODEL_ID": "demo-model",
+            "LLM_API_KEY": "demo-key",
+            "LLM_BASE_URL": "https://example.com/v1",
+            "EMBEDDING_MODEL_ID": "text-embedding-demo",
+            "EMBEDDING_API_KEY": "embed-key",
+            "EMBEDDING_BASE_URL": "https://embed.example.com/v1",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            config = load_runtime_config(env_file=PROJECT_ROOT / ".env.test.missing")
+
+        self.assertTrue(config.embedding_configured)
+        self.assertEqual(config.embedding_model_id, "text-embedding-demo")
+
 
 if __name__ == "__main__":
     unittest.main()

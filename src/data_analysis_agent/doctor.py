@@ -30,10 +30,18 @@ def run_doctor() -> tuple[DoctorCheck, ...]:
         _check_import("rich"),
         _check_import("gradio"),
         _check_import("pdfplumber"),
+        _check_import("chromadb"),
         DoctorCheck(
             "tavily_env",
             bool(os.getenv("TAVILY_API_KEY")),
             "configured" if os.getenv("TAVILY_API_KEY") else "missing",
+        ),
+        DoctorCheck(
+            "embedding_env",
+            all(os.getenv(name) for name in ("EMBEDDING_MODEL_ID", "EMBEDDING_API_KEY", "EMBEDDING_BASE_URL")),
+            "configured"
+            if all(os.getenv(name) for name in ("EMBEDDING_MODEL_ID", "EMBEDDING_API_KEY", "EMBEDDING_BASE_URL"))
+            else "missing",
         ),
         DoctorCheck(
             "vision_env",

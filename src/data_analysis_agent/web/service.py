@@ -38,6 +38,31 @@ def copy_uploaded_file(uploaded_file: str | Path, *, uploads_root: str | Path, s
     return destination
 
 
+def copy_uploaded_knowledge_files(
+    uploaded_files: str | Path | list[str] | list[Path] | tuple[str | Path, ...] | None,
+    *,
+    uploads_root: str | Path,
+    session_id: str,
+) -> tuple[Path, ...]:
+    if not uploaded_files:
+        return ()
+    if isinstance(uploaded_files, (str, Path)):
+        file_list = [uploaded_files]
+    else:
+        file_list = list(uploaded_files)
+    copied: list[Path] = []
+    destination_dir = Path(uploads_root) / session_id / "knowledge"
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    for item in file_list:
+        source = Path(item)
+        if not source.exists():
+            raise FileNotFoundError(f"Knowledge file does not exist: {source}")
+        destination = destination_dir / source.name
+        shutil.copy2(source, destination)
+        copied.append(destination)
+    return tuple(copied)
+
+
 def create_run_bundle(run_dir: str | Path) -> Path:
     run_path = Path(run_dir)
     archive_base = run_path.parent / f"{run_path.name}_artifacts"
@@ -195,6 +220,7 @@ def _result_outputs(
     status_text = (
         f"运行完成。质量档位：{result.quality_mode}；"
         f"文档解析状态：{result.document_ingestion_status}；"
+        f"RAG：{result.rag_status}；"
         f"文本审稿状态：{result.review_status}；"
         f"视觉审稿状态：{result.vision_review_status}；"
         f"返修轮次：{result.review_rounds_used}。"
@@ -242,6 +268,8 @@ def stream_analysis_session(
     agent_name: str,
     env_file: str,
     session_label: str,
+    knowledge_uploads: str | Path | list[str] | list[Path] | tuple[str | Path, ...] | None = None,
+    use_rag: bool = True,
 ) -> Generator[tuple[object, ...], None, None]:
     logs: list[str] = []
     if not uploaded_file:
@@ -257,6 +285,19 @@ def stream_analysis_session(
         return
 
     logs.append(f"上传文件已复制到：{copied_file.as_posix()}")
+    copied_knowledge_files: tuple[Path, ...] = ()
+    if knowledge_uploads:
+        try:
+            copied_knowledge_files = copy_uploaded_knowledge_files(
+                knowledge_uploads,
+                uploads_root=uploads_root,
+                session_id=session_id,
+            )
+        except Exception as exc:
+            yield _error_outputs(f"知识文件处理失败：{exc}", logs)
+            return
+        if copied_knowledge_files:
+            logs.append(f"知识文件已准备：{len(copied_knowledge_files)} 个")
     yield _running_outputs("文件已接收，正在启动分析任务。", logs)
 
     event_queue: queue.Queue[tuple[str, object]] = queue.Queue()
@@ -284,6 +325,8 @@ def stream_analysis_session(
                 vision_max_images=max(1, int(vision_max_images)),
                 vision_max_image_side=max(256, min(int(vision_max_image_side), 2048)),
                 event_handler=handle_event,
+                knowledge_paths=copied_knowledge_files,
+                use_rag=bool(use_rag),
             )
             event_queue.put(("result", result))
         except Exception as exc:
@@ -333,6 +376,7 @@ def stream_analysis_session(
 
 __all__ = [
     "copy_uploaded_file",
+    "copy_uploaded_knowledge_files",
     "create_run_bundle",
     "default_max_reviews_for_quality",
     "preview_pdf_candidates",

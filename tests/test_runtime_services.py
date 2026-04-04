@@ -14,6 +14,8 @@ from data_analysis_agent.artifact_service import build_run_context
 from data_analysis_agent.doctor import run_doctor
 from data_analysis_agent.events import EventRecorder
 from data_analysis_agent.knowledge_context import KnowledgeContextProvider
+from data_analysis_agent.rag.models import RetrievedChunk
+from data_analysis_agent.rag.query_builder import build_retrieval_queries
 from data_analysis_agent.runtime_models import WorkflowState
 from data_analysis_agent.tooling_service import execute_tool_call
 
@@ -85,6 +87,36 @@ class RuntimeServiceTests(unittest.TestCase):
         self.assertIn("Please focus on biomarker meaning.", rendered)
         self.assertIn("knowledge_ref.txt", rendered)
 
+    def test_knowledge_context_provider_renders_retrieved_chunks(self):
+        class _DataContext:
+            columns = ["marker_a", "marker_b"]
+            background_literature_context = "Clinical biomarker interpretation notes."
+            selected_table_id = ""
+            candidate_table_summaries_text = ""
+
+        provider = KnowledgeContextProvider()
+        query_bundle = build_retrieval_queries(
+            data_context=_DataContext(),
+            user_query="Please explain marker_a.",
+        )
+        bundle = provider.collect(
+            data_context=_DataContext(),
+            user_query="Please explain marker_a.",
+            retrieved_chunks=(
+                RetrievedChunk(
+                    chunk_id="chunk-1",
+                    text="marker_a usually reflects inflammatory burden.",
+                    source_name="glossary.md",
+                    source_path="memory/knowledge_base/files/glossary.md",
+                    page_number=None,
+                ),
+            ),
+        )
+
+        self.assertIn("marker_a", query_bundle.keyword_query)
+        self.assertIn("<Retrieved_Knowledge_Context>", bundle.render_for_prompt())
+        self.assertIn("glossary.md", bundle.render_for_prompt())
+
     def test_run_doctor_reports_expected_checks(self):
         checks = run_doctor()
         names = {check.name for check in checks}
@@ -93,6 +125,8 @@ class RuntimeServiceTests(unittest.TestCase):
         self.assertIn("rich", names)
         self.assertIn("gradio", names)
         self.assertIn("pdfplumber", names)
+        self.assertIn("chromadb", names)
+        self.assertIn("embedding_env", names)
 
 
 if __name__ == "__main__":

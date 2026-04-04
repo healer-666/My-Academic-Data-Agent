@@ -27,6 +27,8 @@ class DataContextSummary:
     pdf_small_table_mode: bool = False
     candidate_table_count: int = 0
     selected_table_id: str = ""
+    selected_table_headers: tuple[str, ...] = ()
+    selected_table_numeric_columns: tuple[str, ...] = ()
     pdf_multi_table_mode: bool = False
     candidate_table_summaries_text: str = ""
 
@@ -195,7 +197,7 @@ def build_data_context(
         candidate_table_count,
         selected_table_id,
         selected_table_shape,
-        _selected_table_headers,
+        selected_table_headers,
         selected_table_numeric_columns,
         pdf_multi_table_mode,
     ) = _extract_selected_table_metadata(parsed_payload)
@@ -260,6 +262,8 @@ def build_data_context(
         pdf_small_table_mode=pdf_small_table_mode,
         candidate_table_count=candidate_table_count,
         selected_table_id=selected_table_id,
+        selected_table_headers=selected_table_headers,
+        selected_table_numeric_columns=selected_table_numeric_columns,
         pdf_multi_table_mode=pdf_multi_table_mode,
         candidate_table_summaries_text=candidate_table_summaries_text,
     )

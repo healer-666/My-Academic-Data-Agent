@@ -95,15 +95,27 @@ def workflow_status_label(workflow_complete: bool) -> str:
     return "已完成" if workflow_complete else "未完成"
 
 
+def rag_status_label(status: str) -> str:
+    return {
+        "disabled": "已关闭",
+        "skipped": "已跳过",
+        "retrieved": "已命中",
+        "no_matches": "未命中",
+        "empty": "知识库为空",
+        "failed": "检索失败",
+    }.get(status, status or "未知")
+
+
 def format_event_line(event_type: str, payload: dict[str, object]) -> str:
     if event_type == "config_loading":
         return "[1/8] 正在加载运行配置..."
     if event_type == "config_loaded":
         model_id = payload.get("model_id", "unknown")
         tavily = "已配置" if payload.get("tavily_configured") else "未配置"
+        embedding = "已配置" if payload.get("embedding_configured") else "未配置"
         vision = "已配置" if payload.get("vision_configured") else "未配置"
         latency_mode = latency_mode_label(str(payload.get("latency_mode", "auto")))
-        return f"模型：{model_id} | Tavily：{tavily} | 视觉审稿：{vision} | 延迟模式：{latency_mode}"
+        return f"模型：{model_id} | Tavily：{tavily} | Embedding：{embedding} | 视觉审稿：{vision} | 延迟模式：{latency_mode}"
     if event_type == "run_directory_created":
         return f"运行目录已创建：{payload.get('run_dir', '')}"
     if event_type == "document_ingestion_started":
@@ -115,6 +127,45 @@ def format_event_line(event_type: str, payload: dict[str, object]) -> str:
     if event_type == "data_context_ready":
         shape = payload.get("shape", ("?", "?"))
         return f"数据上下文已构建：{shape[0]} 行 x {shape[1]} 列"
+    if event_type == "knowledge_indexing_started":
+        return f"RAG 索引已开始：准备处理 {payload.get('file_count', 0)} 个知识文件。"
+    if event_type == "knowledge_indexing_completed":
+        return (
+            f"RAG 索引完成 | 状态：{payload.get('status', 'unknown')} | "
+            f"新增文档：{payload.get('indexed_count', 0)}"
+        )
+    if event_type == "knowledge_indexing_skipped":
+        return f"RAG 索引已跳过。\n{payload.get('reason', '')}"
+    if event_type == "knowledge_structured_chunking_completed":
+        return (
+            f"Structured chunking completed | chunks: {payload.get('chunk_count', 0)} | "
+            f"enabled: {payload.get('structured_chunking_enabled', False)}"
+        )
+    if event_type == "knowledge_table_candidates_prepared":
+        return (
+            f"PDF table candidates prepared | count: {payload.get('table_candidate_count', 0)} | "
+            f"selected: {payload.get('selected_table_id', '')}"
+        )
+    if event_type == "knowledge_query_built":
+        return "RAG 查询已构建：已生成 dense query 与 keyword query。"
+    if event_type == "knowledge_dense_retrieval_completed":
+        return f"Dense 检索完成 | 命中：{payload.get('match_count', 0)}"
+    if event_type == "knowledge_keyword_retrieval_completed":
+        return f"Keyword 检索完成 | 命中：{payload.get('match_count', 0)}"
+    if event_type == "knowledge_rerank_completed":
+        return (
+            f"RAG 重排完成 | 最终保留：{payload.get('match_count', 0)} | "
+            f"策略：{payload.get('retrieval_strategy', 'unknown')}"
+        )
+    if event_type == "knowledge_retrieval_started":
+        return "RAG 检索已开始：正在从本地知识库召回背景知识。"
+    if event_type == "knowledge_retrieval_completed":
+        return (
+            f"RAG 检索完成 | 状态：{payload.get('status', 'unknown')} | "
+            f"命中：{payload.get('match_count', 0)}"
+        )
+    if event_type == "knowledge_retrieval_skipped":
+        return f"RAG 检索已跳过。\n{payload.get('reason', '')}"
     if event_type == "tool_registry_ready":
         tools = ", ".join(payload.get("tools", [])) if isinstance(payload.get("tools"), list) else ""
         return (
@@ -214,6 +265,8 @@ def build_overview_html(result: AnalysisRunResult) -> str:
         ("识别领域", result.detected_domain or "unknown"),
         ("报告质量", quality_mode_label(result.quality_mode)),
         ("延迟模式", latency_mode_label(result.latency_mode)),
+        ("RAG", rag_status_label(result.rag_status)),
+        ("检索策略", result.rag_retrieval_strategy),
         ("文本审稿", review_status_label(result.review_status)),
         ("视觉审稿", vision_review_status_label(result.vision_review_status)),
         ("总耗时", format_duration(result.total_duration_ms)),
@@ -234,6 +287,7 @@ def build_overview_html(result: AnalysisRunResult) -> str:
         "<div class='section-heading'>运行总览</div>"
         "<div class='section-subtitle'>先看文档解析和关键指标，再进入报告、图表与审稿结果。</div>"
         f"{_build_ingestion_focus_block(result)}"
+        f"{_build_rag_focus_block(result)}"
         f"<div class='metric-grid'>{card_html}</div>"
         "</section>"
     )
@@ -259,6 +313,7 @@ def _load_review_history(result: AnalysisRunResult) -> list[dict[str, str]]:
 def build_summary_markdown(result: AnalysisRunResult) -> str:
     methods = ", ".join(result.methods_used) if result.methods_used else "unknown"
     tools = ", ".join(result.tools_used) if result.tools_used else "unknown"
+    rag_sources = ", ".join(result.rag_sources_used) if result.rag_sources_used else "无"
     warnings = "\n".join(f"- {item}" for item in result.workflow_warnings) if result.workflow_warnings else "- 无"
     ingestion_log = result.document_ingestion_log_path.as_posix() if result.document_ingestion_log_path else "无"
     pdf_mode = "启用" if result.pdf_multi_table_mode else "未启用"
@@ -277,6 +332,15 @@ def build_summary_markdown(result: AnalysisRunResult) -> str:
         f"- 候选表数量：`{result.candidate_table_count}`\n"
         f"- 主表 ID：`{result.selected_table_id or 'N/A'}`\n"
         f"- 主表形状：`{result.selected_table_shape or 'N/A'}`\n"
+        f"- RAG：`{rag_status_label(result.rag_status)} ({result.rag_status})`\n"
+        f"- RAG 命中数：`{result.rag_match_count}`\n"
+        f"- Dense 命中数：`{result.rag_dense_match_count}`\n"
+        f"- Keyword 命中数：`{result.rag_keyword_match_count}`\n"
+        f"- 检索策略：`{result.rag_retrieval_strategy}`\n"
+        f"- PDF 表格候选：`{result.rag_table_candidate_count}`\n"
+        f"- 结构化命中类型：`{', '.join(result.rag_final_chunk_kinds) if result.rag_final_chunk_kinds else 'none'}`\n"
+        f"- 命中主表证据：`{result.rag_selected_table_hit}`\n"
+        f"- RAG 来源：`{rag_sources}`\n"
         f"- 视觉审稿：`{vision_review_status_label(result.vision_review_status)} ({result.vision_review_mode})`\n"
         f"- 文本审稿：`{review_status_label(result.review_status)}`\n"
         f"- 审稿轮次：`{result.review_rounds_used}`\n"
@@ -390,10 +454,25 @@ def build_trace_html(result: AnalysisRunResult) -> str:
         f"{_escape(result.vision_review_summary or '暂无视觉审稿摘要。')}"
         "</div>"
     )
+    rag_sources = ", ".join(result.rag_sources_used) if result.rag_sources_used else "无"
+    rag_block = (
+        "<div class='empty-panel'>"
+        f"RAG：{_escape(rag_status_label(result.rag_status))} | "
+        f"命中：{_escape(result.rag_match_count)} | "
+        f"策略：{_escape(result.rag_retrieval_strategy)}<br>"
+        f"PDF table candidates：{_escape(result.rag_table_candidate_count)} | "
+        f"selected table hit：{_escape(result.rag_selected_table_hit)}<br>"
+        f"chunk kinds：{_escape(', '.join(result.rag_final_chunk_kinds) if result.rag_final_chunk_kinds else 'none')}<br>"
+        f"Dense：{_escape(result.rag_dense_match_count)} | "
+        f"Keyword：{_escape(result.rag_keyword_match_count)}<br>"
+        f"来源：{_escape(rag_sources)}"
+        "</div>"
+    )
     return (
         "<section class='trace-workbench'>"
         "<div class='section-heading'>诊断与轨迹</div>"
         f"{document_block}"
+        f"{rag_block}"
         f"{visual_block}"
         "<table class='trace-table'>"
         "<thead><tr>"
@@ -423,3 +502,18 @@ def build_download_paths(
     bundle_path: str | None = None,
 ) -> tuple[str | None, str | None, str | None]:
     return report_path, trace_path, bundle_path
+
+
+def _build_rag_focus_block(result: AnalysisRunResult) -> str:
+    rag_sources = ", ".join(result.rag_sources_used) if result.rag_sources_used else "无"
+    return (
+        "<div class='review-highlight'>"
+        "<div class='review-status-pill'>RAG 知识增强</div>"
+        f"<div class='review-highlight-body'>状态：{_escape(rag_status_label(result.rag_status))}<br>"
+        f"命中片段：{_escape(result.rag_match_count)}<br>"
+        f"检索策略：{_escape(result.rag_retrieval_strategy)}<br>"
+        f"PDF 表格候选：{_escape(result.rag_table_candidate_count)}<br>"
+        f"chunk kinds：{_escape(', '.join(result.rag_final_chunk_kinds) if result.rag_final_chunk_kinds else 'none')}<br>"
+        f"主要来源：{_escape(rag_sources)}</div>"
+        "</div>"
+    )

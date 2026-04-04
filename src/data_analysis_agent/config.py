@@ -35,6 +35,10 @@ class RuntimeConfig:
     base_url: str
     timeout: int = 120
     tavily_api_key: Optional[str] = None
+    embedding_model_id: Optional[str] = None
+    embedding_api_key: Optional[str] = None
+    embedding_base_url: Optional[str] = None
+    embedding_timeout: int = 120
     vision_model_id: Optional[str] = None
     vision_api_key: Optional[str] = None
     vision_base_url: Optional[str] = None
@@ -43,6 +47,10 @@ class RuntimeConfig:
     @property
     def vision_configured(self) -> bool:
         return bool(self.vision_model_id and self.vision_api_key and self.vision_base_url)
+
+    @property
+    def embedding_configured(self) -> bool:
+        return bool(self.embedding_model_id and self.embedding_api_key and self.embedding_base_url)
 
 
 def _patched_get_encoding(self):
@@ -97,6 +105,7 @@ def load_runtime_config(env_file: Optional[str | Path] = None) -> RuntimeConfig:
         )
 
     timeout = int(os.getenv("LLM_TIMEOUT", "120"))
+    embedding_timeout = int(os.getenv("EMBEDDING_TIMEOUT", str(timeout)))
     vision_timeout = int(os.getenv("VISION_LLM_TIMEOUT", str(timeout)))
     config = RuntimeConfig(
         model_id=os.environ["LLM_MODEL_ID"],
@@ -104,6 +113,10 @@ def load_runtime_config(env_file: Optional[str | Path] = None) -> RuntimeConfig:
         base_url=os.environ["LLM_BASE_URL"],
         timeout=timeout,
         tavily_api_key=os.getenv("TAVILY_API_KEY"),
+        embedding_model_id=os.getenv("EMBEDDING_MODEL_ID"),
+        embedding_api_key=os.getenv("EMBEDDING_API_KEY"),
+        embedding_base_url=os.getenv("EMBEDDING_BASE_URL"),
+        embedding_timeout=embedding_timeout,
         vision_model_id=os.getenv("VISION_LLM_MODEL_ID"),
         vision_api_key=os.getenv("VISION_LLM_API_KEY"),
         vision_base_url=os.getenv("VISION_LLM_BASE_URL"),

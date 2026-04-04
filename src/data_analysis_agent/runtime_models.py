@@ -188,6 +188,16 @@ class AnalysisRunResult:
     vision_review_summary: str = ""
     vision_review_duration_ms: int = 0
     vision_review_log_paths: tuple[Path, ...] = ()
+    rag_enabled: bool = False
+    rag_status: str = "disabled"
+    rag_match_count: int = 0
+    rag_sources_used: tuple[str, ...] = ()
+    rag_dense_match_count: int = 0
+    rag_keyword_match_count: int = 0
+    rag_retrieval_strategy: str = "dense_only"
+    rag_table_candidate_count: int = 0
+    rag_final_chunk_kinds: tuple[str, ...] = ()
+    rag_selected_table_hit: bool = False
     total_duration_ms: int = 0
     llm_duration_ms: int = 0
     tool_duration_ms: int = 0

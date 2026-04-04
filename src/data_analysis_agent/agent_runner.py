@@ -10,7 +10,7 @@ import time
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Iterable, Optional
 
 from .artifact_service import (
     build_review_figures_dir as _build_review_figures_dir_service,
@@ -36,6 +36,7 @@ from .prompts import (
     build_response_format_feedback,
     build_system_prompt,
 )
+from .rag import RagService
 from .reporting import (
     ReportTelemetry,
     extract_report_and_telemetry,
@@ -113,6 +114,48 @@ def build_plaintext_event_handler() -> EventHandler:
         elif event_type == "data_context_ready":
             shape = payload.get("shape", ("?", "?"))
             print(f"      Data shape: {shape[0]} rows x {shape[1]} columns")
+        elif event_type == "knowledge_indexing_started":
+            print(f"      Indexing {payload.get('file_count', 0)} knowledge file(s) into the local knowledge base...")
+        elif event_type == "knowledge_indexing_completed":
+            print(
+                f"      Knowledge indexing completed | status = {payload.get('status', 'unknown')} | "
+                f"indexed = {payload.get('indexed_count', 0)}"
+            )
+        elif event_type == "knowledge_indexing_skipped":
+            print(f"      Knowledge indexing skipped: {payload.get('reason', '')}")
+        elif event_type == "knowledge_structured_chunking_completed":
+            print(
+                f"      Structured chunking completed | chunks = {payload.get('chunk_count', 0)} | "
+                f"enabled = {payload.get('structured_chunking_enabled', False)}"
+            )
+        elif event_type == "knowledge_table_candidates_prepared":
+            print(
+                f"      PDF table candidates prepared | count = {payload.get('table_candidate_count', 0)} | "
+                f"selected = {payload.get('selected_table_id', '')}"
+            )
+        elif event_type == "knowledge_retrieval_started":
+            print("      Retrieving local background knowledge for this run...")
+        elif event_type == "knowledge_query_built":
+            print(
+                f"      Retrieval query prepared | dense = {payload.get('dense_query', '')[:80]} | "
+                f"keyword = {payload.get('keyword_query', '')[:80]}"
+            )
+        elif event_type == "knowledge_dense_retrieval_completed":
+            print(f"      Dense retrieval completed | matches = {payload.get('match_count', 0)}")
+        elif event_type == "knowledge_keyword_retrieval_completed":
+            print(f"      Keyword retrieval completed | matches = {payload.get('match_count', 0)}")
+        elif event_type == "knowledge_rerank_completed":
+            print(
+                f"      Hybrid rerank completed | final matches = {payload.get('match_count', 0)} | "
+                f"strategy = {payload.get('retrieval_strategy', 'hybrid')}"
+            )
+        elif event_type == "knowledge_retrieval_completed":
+            print(
+                f"      Knowledge retrieval completed | status = {payload.get('status', 'unknown')} | "
+                f"matches = {payload.get('match_count', 0)}"
+            )
+        elif event_type == "knowledge_retrieval_skipped":
+            print(f"      Knowledge retrieval skipped: {payload.get('reason', '')}")
         elif event_type == "tool_registry_ready":
             print(f"[5/7] Tool registry ready: {', '.join(payload.get('tools', []))}")
             print(
@@ -190,6 +233,31 @@ def _truncate_text(text: str, limit: int) -> str:
     if len(normalized) <= limit:
         return normalized
     return normalized[:limit].rstrip() + " ... [truncated]"
+
+
+def _build_default_rag_payload(*, use_rag: bool, knowledge_base_dir: Path) -> dict[str, Any]:
+    return {
+        "enabled": bool(use_rag),
+        "status": "disabled" if not use_rag else "skipped",
+        "configured": False,
+        "knowledge_base_dir": knowledge_base_dir.as_posix(),
+        "collection_name": RagService.COLLECTION_NAME,
+        "indexed_documents": [],
+        "retrieval_query": "",
+        "dense_query": "",
+        "keyword_query": "",
+        "dense_candidates": [],
+        "keyword_candidates": [],
+        "structured_chunking_enabled": True,
+        "table_candidate_count": 0,
+        "ephemeral_table_candidates": [],
+        "merged_candidates_count": 0,
+        "reranked_chunks": [],
+        "retrieval_strategy": "hybrid",
+        "retrieved_chunks": [],
+        "final_chunk_kinds": [],
+        "warnings": [],
+    }
 
 
 def _build_observation_summary(
@@ -660,6 +728,7 @@ def _save_agent_trace(
     run_context: RunContext | None = None,
     workflow_states: tuple[WorkflowState, ...] = (),
     event_stream: tuple[Any, ...] = (),
+    rag_payload: dict[str, Any] | None = None,
 ) -> Path:
     active_run_context = run_context or RunContext(
         run_id=run_dir.name,
@@ -704,6 +773,7 @@ def _save_agent_trace(
         timing_breakdown=timing_breakdown,
         workflow_states=workflow_states,
         event_stream=event_stream,
+        rag_payload=rag_payload,
     )
 
 
@@ -923,6 +993,9 @@ def run_analysis(
     vision_max_image_side: int = 1024,
     event_handler: Optional[EventHandler] = None,
     verbose: bool = False,
+    use_rag: bool = True,
+    knowledge_paths: Iterable[str | Path] = (),
+    knowledge_base_dir: str | Path | None = None,
 ) -> AnalysisRunResult:
     """Run the full data analysis workflow."""
 
@@ -956,6 +1029,7 @@ def run_analysis(
         event_recorder.emit,
         "config_loaded",
         tavily_configured=bool(runtime_config.tavily_api_key),
+        embedding_configured=runtime_config.embedding_configured,
         vision_configured=runtime_config.vision_configured,
         model_id=runtime_config.model_id,
         latency_mode=resolved_latency_mode,
@@ -1074,7 +1148,245 @@ def run_analysis(
     )
 
     knowledge_provider = KnowledgeContextProvider()
+    active_knowledge_base_dir = Path(knowledge_base_dir or Path("memory") / "knowledge_base").resolve()
+    rag_payload = _build_default_rag_payload(use_rag=use_rag, knowledge_base_dir=active_knowledge_base_dir)
+    rag_payload["configured"] = runtime_config.embedding_configured
+    rag_status = str(rag_payload["status"])
+    rag_match_count = 0
+    rag_dense_match_count = 0
+    rag_keyword_match_count = 0
+    rag_sources_used: tuple[str, ...] = ()
+    rag_retrieval_strategy = "hybrid"
+    rag_table_candidate_count = 0
+    rag_final_chunk_kinds: tuple[str, ...] = ()
+    rag_selected_table_hit = False
+    if knowledge_paths is None:
+        knowledge_path_items = ()
+    elif isinstance(knowledge_paths, (str, Path)):
+        knowledge_path_items: tuple[str | Path, ...] = (knowledge_paths,)
+    else:
+        knowledge_path_items = tuple(knowledge_paths)
+    normalized_knowledge_paths = tuple(
+        Path(path)
+        for path in knowledge_path_items
+        if str(path or "").strip()
+    )
     knowledge_bundle = knowledge_provider.collect(data_context=data_context, user_query=query)
+    if not use_rag:
+        rag_payload["status"] = "disabled"
+        rag_status = "disabled"
+        _emit_event(
+            event_recorder.emit,
+            "knowledge_retrieval_skipped",
+            status=rag_status,
+            reason="RAG is disabled for this run.",
+        )
+    elif not runtime_config.embedding_configured:
+        warning_text = "Embedding configuration is incomplete; skipping local RAG retrieval."
+        rag_payload["status"] = "skipped"
+        rag_status = "skipped"
+        rag_payload["warnings"].append(warning_text)
+        _emit_event(
+            event_recorder.emit,
+            "knowledge_retrieval_skipped",
+            status=rag_status,
+            reason=warning_text,
+        )
+    else:
+        try:
+            rag_service = RagService(
+                runtime_config=runtime_config,
+                knowledge_base_dir=active_knowledge_base_dir,
+            )
+            if normalized_knowledge_paths:
+                _emit_event(
+                    event_recorder.emit,
+                    "knowledge_indexing_started",
+                    file_count=len(normalized_knowledge_paths),
+                    knowledge_base_dir=active_knowledge_base_dir.as_posix(),
+                )
+                index_started_at = time.perf_counter()
+                index_result = rag_service.index_files(normalized_knowledge_paths)
+                _accumulate_duration(
+                    timing_breakdown,
+                    "knowledge_index_duration_ms",
+                    _elapsed_ms(index_started_at),
+                )
+                rag_payload["indexed_documents"] = list(index_result.indexed_documents)
+                rag_payload["warnings"].extend(index_result.warnings)
+                _emit_event(
+                    event_recorder.emit,
+                    "knowledge_structured_chunking_completed",
+                    chunk_count=index_result.indexed_chunk_count,
+                    structured_chunking_enabled=True,
+                )
+                _emit_event(
+                    event_recorder.emit,
+                    "knowledge_indexing_completed",
+                    status=index_result.status,
+                    indexed_count=len(index_result.indexed_documents),
+                    warnings=index_result.warnings,
+                )
+            else:
+                _emit_event(
+                    event_recorder.emit,
+                    "knowledge_indexing_skipped",
+                    status="skipped",
+                    reason="No new knowledge files were uploaded.",
+                )
+
+            ephemeral_table_candidates = rag_service.build_ephemeral_table_candidates(data_context=data_context)
+            rag_table_candidate_count = len(ephemeral_table_candidates)
+            rag_payload["table_candidate_count"] = rag_table_candidate_count
+            rag_payload["ephemeral_table_candidates"] = [chunk.to_trace_dict() for chunk in ephemeral_table_candidates]
+            if ephemeral_table_candidates:
+                _emit_event(
+                    event_recorder.emit,
+                    "knowledge_table_candidates_prepared",
+                    table_candidate_count=rag_table_candidate_count,
+                    selected_table_id=data_context.selected_table_id,
+                )
+
+            query_bundle = rag_service.build_queries(
+                data_context=data_context,
+                user_query=query,
+            )
+            rag_payload["retrieval_query"] = query_bundle.retrieval_query
+            rag_payload["dense_query"] = query_bundle.dense_query
+            rag_payload["keyword_query"] = query_bundle.keyword_query
+            if query_bundle.retrieval_query:
+                _emit_event(
+                    event_recorder.emit,
+                    "knowledge_query_built",
+                    dense_query=query_bundle.dense_query,
+                    keyword_query=query_bundle.keyword_query,
+                )
+                _emit_event(
+                    event_recorder.emit,
+                    "knowledge_retrieval_started",
+                    query=query_bundle.retrieval_query,
+                    top_k=4,
+                )
+                retrieval_started_at = time.perf_counter()
+                retrieval_result = rag_service.retrieve(
+                    retrieval_query=query_bundle.retrieval_query,
+                    dense_query=query_bundle.dense_query,
+                    keyword_query=query_bundle.keyword_query,
+                    query_terms=query_bundle.normalized_terms,
+                    column_terms=tuple(
+                        dict.fromkeys(
+                            [*data_context.columns[:8], *data_context.selected_table_headers, *data_context.selected_table_numeric_columns]
+                        )
+                    ),
+                    selected_table_id=data_context.selected_table_id,
+                    ephemeral_candidates=ephemeral_table_candidates,
+                    top_k=4,
+                )
+                _accumulate_duration(
+                    timing_breakdown,
+                    "knowledge_retrieval_duration_ms",
+                    _elapsed_ms(retrieval_started_at),
+                )
+                rag_payload["warnings"].extend(retrieval_result.warnings)
+                rag_payload["dense_candidates"] = [chunk.to_trace_dict() for chunk in retrieval_result.dense_candidates]
+                rag_payload["keyword_candidates"] = [chunk.to_trace_dict() for chunk in retrieval_result.keyword_candidates]
+                rag_payload["table_candidate_count"] = retrieval_result.table_candidate_count
+                rag_payload["ephemeral_table_candidates"] = [
+                    chunk.to_trace_dict() for chunk in retrieval_result.ephemeral_table_candidates
+                ]
+                rag_payload["merged_candidates_count"] = len(
+                    {
+                        *[chunk.chunk_id for chunk in retrieval_result.dense_candidates],
+                        *[chunk.chunk_id for chunk in retrieval_result.keyword_candidates],
+                        *[chunk.chunk_id for chunk in retrieval_result.ephemeral_table_candidates],
+                    }
+                )
+                rag_payload["reranked_chunks"] = [chunk.to_trace_dict() for chunk in retrieval_result.reranked_chunks]
+                rag_payload["retrieved_chunks"] = [chunk.to_trace_dict() for chunk in retrieval_result.chunks]
+                rag_payload["status"] = retrieval_result.status
+                rag_payload["retrieval_strategy"] = retrieval_result.retrieval_strategy
+                rag_status = retrieval_result.status
+                rag_dense_match_count = retrieval_result.dense_match_count
+                rag_keyword_match_count = retrieval_result.keyword_match_count
+                rag_retrieval_strategy = retrieval_result.retrieval_strategy
+                rag_table_candidate_count = retrieval_result.table_candidate_count
+                rag_final_chunk_kinds = tuple(
+                    dict.fromkeys(str(chunk.chunk_kind or "") or "text_section" for chunk in retrieval_result.reranked_chunks)
+                )
+                normalized_selected_table_id = str(data_context.selected_table_id or "").strip()
+                rag_selected_table_hit = bool(normalized_selected_table_id) and any(
+                    str(chunk.table_id or "").strip() == normalized_selected_table_id
+                    for chunk in retrieval_result.reranked_chunks
+                )
+                rag_payload["final_chunk_kinds"] = list(rag_final_chunk_kinds)
+                _emit_event(
+                    event_recorder.emit,
+                    "knowledge_dense_retrieval_completed",
+                    match_count=rag_dense_match_count,
+                )
+                _emit_event(
+                    event_recorder.emit,
+                    "knowledge_keyword_retrieval_completed",
+                    match_count=rag_keyword_match_count,
+                )
+                _emit_event(
+                    event_recorder.emit,
+                    "knowledge_rerank_completed",
+                    match_count=retrieval_result.match_count,
+                    retrieval_strategy=rag_retrieval_strategy,
+                )
+                if retrieval_result.status == "retrieved":
+                    rag_match_count = retrieval_result.match_count
+                    rag_sources_used = retrieval_result.source_names
+                    knowledge_bundle = knowledge_provider.collect(
+                        data_context=data_context,
+                        user_query=query,
+                        retrieved_chunks=retrieval_result.reranked_chunks or retrieval_result.chunks,
+                    )
+                    _emit_event(
+                        event_recorder.emit,
+                        "knowledge_retrieval_completed",
+                        status=rag_status,
+                        match_count=rag_match_count,
+                        sources=list(rag_sources_used),
+                    )
+                elif retrieval_result.status == "empty":
+                    _emit_event(
+                        event_recorder.emit,
+                        "knowledge_retrieval_skipped",
+                        status=rag_status,
+                        reason="Knowledge base is empty.",
+                    )
+                else:
+                    _emit_event(
+                        event_recorder.emit,
+                        "knowledge_retrieval_completed",
+                        status=rag_status,
+                        match_count=0,
+                        sources=[],
+                    )
+            else:
+                rag_payload["status"] = "skipped"
+                rag_status = "skipped"
+                rag_retrieval_strategy = "hybrid"
+                rag_payload["warnings"].append("Retrieval query is empty; local RAG was skipped.")
+                _emit_event(
+                    event_recorder.emit,
+                    "knowledge_retrieval_skipped",
+                    status=rag_status,
+                    reason="Retrieval query is empty.",
+                )
+        except Exception as exc:
+            warning_text = f"RAG retrieval failed: {exc}"
+            rag_payload["status"] = "failed"
+            rag_status = "failed"
+            rag_payload["warnings"].append(warning_text)
+            _emit_event(
+                event_recorder.emit,
+                "knowledge_retrieval_skipped",
+                status=rag_status,
+                reason=warning_text,
+            )
 
     tool_registry = build_tool_registry(enable_search=search_enabled)
     _emit_event(
@@ -1252,6 +1564,7 @@ def run_analysis(
             run_context=run_context,
             workflow_states=workflow_tracker.snapshot(),
             event_stream=event_recorder.snapshot(),
+            rag_payload=rag_payload,
         )
         _accumulate_duration(timing_breakdown, "trace_persist_duration_ms", _elapsed_ms(trace_persist_started_at))
 
@@ -1479,6 +1792,7 @@ def run_analysis(
         run_context=run_context,
         workflow_states=workflow_tracker.snapshot(),
         event_stream=event_recorder.snapshot(),
+        rag_payload=rag_payload,
     )
     _accumulate_duration(
         timing_breakdown,
@@ -1551,6 +1865,16 @@ def run_analysis(
         vision_review_summary=vision_review_summary,
         vision_review_duration_ms=final_timing_breakdown.get("vision_review_duration_ms", 0),
         vision_review_log_paths=tuple(review.log_path for review in visual_review_history),
+        rag_enabled=use_rag,
+        rag_status=rag_status,
+        rag_match_count=rag_match_count,
+        rag_sources_used=rag_sources_used,
+        rag_dense_match_count=rag_dense_match_count,
+        rag_keyword_match_count=rag_keyword_match_count,
+        rag_retrieval_strategy=rag_retrieval_strategy,
+        rag_table_candidate_count=rag_table_candidate_count,
+        rag_final_chunk_kinds=rag_final_chunk_kinds,
+        rag_selected_table_hit=rag_selected_table_hit,
         total_duration_ms=final_timing_breakdown.get("total_duration_ms", 0),
         llm_duration_ms=final_timing_breakdown.get("llm_duration_ms", 0),
         tool_duration_ms=final_timing_breakdown.get("tool_duration_ms", 0),

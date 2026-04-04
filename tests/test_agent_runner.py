@@ -27,6 +27,8 @@ from data_analysis_agent.data_context import DataContextSummary
 from data_analysis_agent.document_ingestion import IngestionResult
 from data_analysis_agent.reporting import ReportTelemetry
 from data_analysis_agent.prompts import build_system_prompt
+from data_analysis_agent.rag.query_builder import RetrievalQueryBundle
+from data_analysis_agent.rag.models import RagIndexResult, RagRetrievalResult, RetrievedChunk
 from data_analysis_agent.vision_review import VisualReviewResult
 
 
@@ -68,6 +70,112 @@ class StubRegistry:
             self.cleaned_data_path.parent.mkdir(parents=True, exist_ok=True)
             self.cleaned_data_path.write_text("a,b\n1,2\n", encoding="utf-8")
         return '{"status":"success","text":"cleaned_data saved\\np-value=0.01\\nchart=figures/chart.png"}'
+
+
+class FakeRagService:
+    COLLECTION_NAME = "academic_data_agent_knowledge"
+
+    def __init__(self, *, runtime_config, knowledge_base_dir=None):
+        self.runtime_config = runtime_config
+        self.knowledge_base_dir = knowledge_base_dir
+
+    def index_files(self, knowledge_paths):
+        return RagIndexResult(
+            status="completed",
+            indexed_documents=tuple(Path(path).name for path in knowledge_paths),
+            indexed_chunk_count=1,
+            warnings=(),
+        )
+
+    def build_queries(self, *, data_context, user_query=""):
+        return RetrievalQueryBundle(
+            retrieval_query=f"{user_query} | {', '.join(data_context.columns[:8])}".strip(" |"),
+            dense_query=f"{user_query} | dense".strip(" |"),
+            keyword_query="marker_a biomarker glossary",
+            normalized_terms=("marker_a", "biomarker", "glossary"),
+        )
+
+    def build_ephemeral_table_candidates(self, *, data_context):
+        if not getattr(data_context, "selected_table_id", ""):
+            return ()
+        return (
+            RetrievedChunk(
+                chunk_id="ephemeral-table-1",
+                text="Ephemeral table summary for table_02. Headers: marker_a, marker_b.",
+                source_name="sample.pdf",
+                source_path="memory/parsed_document.json",
+                chunk_kind="table_summary",
+                table_id=str(data_context.selected_table_id),
+                table_headers=tuple(getattr(data_context, "selected_table_headers", ()) or ("marker_a", "marker_b")),
+                table_numeric_columns=tuple(
+                    getattr(data_context, "selected_table_numeric_columns", ()) or ("marker_a", "marker_b")
+                ),
+                match_reasons=("ephemeral_table", "selected_table"),
+            ),
+        )
+
+    def retrieve(
+        self,
+        *,
+        retrieval_query="",
+        top_k=4,
+        dense_query="",
+        keyword_query="",
+        query_terms=(),
+        column_terms=(),
+        selected_table_id="",
+        ephemeral_candidates=(),
+        dense_top_k=8,
+        keyword_top_k=8,
+    ):
+        dense_chunk = RetrievedChunk(
+            chunk_id="chunk-1",
+            text="Biomarker A usually reflects inflammatory burden.",
+            source_name="glossary.md",
+            source_path="memory/knowledge_base/files/glossary.md",
+            knowledge_type="glossary",
+            distance=0.1,
+            dense_score=0.91,
+            match_reasons=("dense",),
+        )
+        keyword_chunk = RetrievedChunk(
+            chunk_id="chunk-1",
+            text="Biomarker A usually reflects inflammatory burden.",
+            source_name="glossary.md",
+            source_path="memory/knowledge_base/files/glossary.md",
+            knowledge_type="glossary",
+            keyword_score=2.5,
+            match_reasons=("keyword",),
+        )
+        reranked_chunk = RetrievedChunk(
+            chunk_id="chunk-1",
+            text="Biomarker A usually reflects inflammatory burden.",
+            source_name="glossary.md",
+            source_path="memory/knowledge_base/files/glossary.md",
+            knowledge_type="glossary",
+            distance=0.1,
+            dense_score=0.91,
+            keyword_score=2.5,
+            rerank_score=2.11,
+            match_reasons=("dense", "keyword", "glossary"),
+        )
+        final_chunks = (reranked_chunk,)
+        if tuple(ephemeral_candidates):
+            final_chunks = tuple(ephemeral_candidates)
+        return RagRetrievalResult(
+            status="retrieved",
+            retrieval_query=retrieval_query,
+            dense_query=dense_query,
+            keyword_query=keyword_query,
+            chunks=final_chunks,
+            dense_candidates=(dense_chunk,),
+            keyword_candidates=(keyword_chunk,),
+            ephemeral_table_candidates=tuple(ephemeral_candidates),
+            reranked_chunks=final_chunks,
+            retrieval_strategy="hybrid",
+            table_candidate_count=len(tuple(ephemeral_candidates)),
+            warnings=(),
+        )
 
 
 class AgentRunnerTests(unittest.TestCase):
@@ -1115,6 +1223,180 @@ class AgentRunnerTests(unittest.TestCase):
         self.assertEqual(result.selected_table_id, "table_02")
         self.assertEqual(result.candidate_table_count, 2)
         self.assertEqual(ingest_mock.call_args.kwargs["selected_table_id"], "table_02")
+
+    def test_run_analysis_injects_retrieved_knowledge_when_rag_enabled(self):
+        tmp_path = self._workspace_case_dir()
+        data_path = tmp_path / "sample.csv"
+        data_path.write_text("marker_a,marker_b\n1,2\n", encoding="utf-8")
+        knowledge_path = tmp_path / "glossary.md"
+        knowledge_path.write_text("Biomarker A glossary entry.", encoding="utf-8")
+
+        runtime_config = RuntimeConfig(
+            model_id="demo-model",
+            api_key="demo-key",
+            base_url="https://example.com/v1",
+            timeout=30,
+            tavily_api_key=None,
+            embedding_model_id="text-embedding-demo",
+            embedding_api_key="embed-key",
+            embedding_base_url="https://embed.example.com/v1",
+            embedding_timeout=30,
+        )
+        llm = StubLLM(
+            [
+                """
+                {
+                  "decision": "The report is complete.",
+                  "action": "finish",
+                  "tool_name": "",
+                  "tool_input": "",
+                  "final_answer": "# Data Analysis Report\\n\\n## Data Overview\\nDone.\\n\\n<telemetry>{\\"methods\\": [], \\"domain\\": \\"biomedicine\\", \\"tools_used\\": [], \\"search_used\\": false, \\"search_notes\\": \\"not triggered\\", \\"cleaned_data_saved\\": false, \\"cleaned_data_path\\": \\"\\", \\"figures_generated\\": []}</telemetry>"
+                }
+                """,
+            ]
+        )
+
+        with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=runtime_config), patch(
+            "data_analysis_agent.agent_runner.build_llm", return_value=llm
+        ), patch(
+            "data_analysis_agent.agent_runner.build_tool_registry",
+            return_value=StubRegistry(cleaned_data_path=None, include_tavily=False),
+        ), patch("data_analysis_agent.agent_runner.RagService", FakeRagService):
+            result = run_analysis(
+                data_path,
+                output_dir=tmp_path / "outputs",
+                quality_mode="draft",
+                use_rag=True,
+                knowledge_paths=(knowledge_path,),
+            )
+
+        self.assertEqual(result.rag_status, "retrieved")
+        self.assertEqual(result.rag_match_count, 1)
+        self.assertEqual(result.rag_sources_used, ("glossary.md",))
+        self.assertEqual(result.rag_dense_match_count, 1)
+        self.assertEqual(result.rag_keyword_match_count, 1)
+        self.assertEqual(result.rag_retrieval_strategy, "hybrid")
+        self.assertEqual(result.rag_table_candidate_count, 0)
+        self.assertEqual(result.rag_final_chunk_kinds, ("text_section",))
+        self.assertFalse(result.rag_selected_table_hit)
+        self.assertIn("<Retrieved_Knowledge_Context>", llm.calls[0][1]["content"])
+        trace_payload = json.loads(result.trace_path.read_text(encoding="utf-8"))
+        self.assertEqual(trace_payload["rag"]["status"], "retrieved")
+        self.assertEqual(trace_payload["rag"]["indexed_documents"], ["glossary.md"])
+        self.assertEqual(trace_payload["rag"]["retrieval_strategy"], "hybrid")
+        self.assertTrue(trace_payload["rag"]["dense_query"])
+        self.assertTrue(trace_payload["rag"]["keyword_query"])
+        self.assertEqual(len(trace_payload["rag"]["dense_candidates"]), 1)
+        self.assertEqual(len(trace_payload["rag"]["keyword_candidates"]), 1)
+        self.assertEqual(len(trace_payload["rag"]["reranked_chunks"]), 1)
+        self.assertEqual(trace_payload["rag"]["table_candidate_count"], 0)
+        self.assertEqual(trace_payload["rag"]["final_chunk_kinds"], ["text_section"])
+
+    def test_run_analysis_pdf_rag_uses_ephemeral_table_candidates(self):
+        tmp_path = self._workspace_case_dir()
+        pdf_path = tmp_path / "sample.pdf"
+        pdf_path.write_text("fake-pdf", encoding="utf-8")
+        runtime_config = RuntimeConfig(
+            model_id="demo-model",
+            api_key="demo-key",
+            base_url="https://example.com/v1",
+            timeout=30,
+            tavily_api_key=None,
+            embedding_model_id="text-embedding-demo",
+            embedding_api_key="embed-key",
+            embedding_base_url="https://embed.example.com/v1",
+            embedding_timeout=30,
+        )
+        llm = StubLLM(
+            [
+                """
+                {
+                  "decision": "The report is complete.",
+                  "action": "finish",
+                  "tool_name": "",
+                  "tool_input": "",
+                  "final_answer": "# Data Analysis Report\\n\\n## Data Overview\\nPDF RAG.\\n\\n<telemetry>{\\"methods\\": [], \\"domain\\": \\"generic tabular data\\", \\"tools_used\\": [], \\"search_used\\": false, \\"search_notes\\": \\"not triggered\\", \\"cleaned_data_saved\\": false, \\"cleaned_data_path\\": \\"\\", \\"figures_generated\\": []}</telemetry>"
+                }
+                """,
+            ]
+        )
+
+        with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=runtime_config), patch(
+            "data_analysis_agent.agent_runner.build_llm", return_value=llm
+        ), patch(
+            "data_analysis_agent.agent_runner.build_tool_registry",
+            return_value=StubRegistry(cleaned_data_path=None, include_tavily=False),
+        ), patch("data_analysis_agent.agent_runner.RagService", FakeRagService), patch(
+            "data_analysis_agent.agent_runner.ingest_input_document"
+        ) as ingest_mock:
+            normalized_csv = tmp_path / "outputs" / "run_20260315_153022" / "data" / "extracted_tables" / "table_02.csv"
+            normalized_csv.parent.mkdir(parents=True, exist_ok=True)
+            normalized_csv.write_text("marker_a,marker_b\n1,2\n", encoding="utf-8")
+            parsed_document = tmp_path / "outputs" / "run_20260315_153022" / "data" / "parsed_document.json"
+            parsed_document.parent.mkdir(parents=True, exist_ok=True)
+            parsed_document.write_text(
+                json.dumps(
+                    {
+                        "source_pdf": pdf_path.as_posix(),
+                        "selected_table_id": "table_02",
+                        "candidate_table_summaries": [
+                            {
+                                "table_id": "table_02",
+                                "page_number": 3,
+                                "headers": ["marker_a", "marker_b"],
+                                "numeric_columns": ["marker_a", "marker_b"],
+                                "content_hint": "1 | 2",
+                                "selected_as_primary": True,
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            ingest_mock.return_value = IngestionResult(
+                input_kind="pdf",
+                status="completed",
+                summary="PDF 文档解析完成。",
+                normalized_data_path=normalized_csv,
+                duration_ms=900,
+                log_path=tmp_path / "outputs" / "run_20260315_153022" / "logs" / "document_ingestion.json",
+                parsed_document_path=parsed_document,
+                selected_table_id="table_02",
+                candidate_table_count=1,
+                selected_table_shape=(4, 2),
+                selected_table_headers=("marker_a", "marker_b"),
+                selected_table_numeric_columns=("marker_a", "marker_b"),
+                candidate_table_summaries=(
+                    {
+                        "table_id": "table_02",
+                        "page_number": 3,
+                        "headers": ["marker_a", "marker_b"],
+                        "numeric_columns": ["marker_a", "marker_b"],
+                        "content_hint": "1 | 2",
+                        "selected_as_primary": True,
+                    },
+                ),
+                pdf_multi_table_mode=True,
+            )
+
+            result = run_analysis(
+                pdf_path,
+                output_dir=tmp_path / "outputs",
+                quality_mode="draft",
+                document_ingestion_mode="text_only",
+                selected_table_id="table_02",
+                use_rag=True,
+            )
+
+        self.assertEqual(result.rag_status, "retrieved")
+        self.assertEqual(result.rag_table_candidate_count, 1)
+        self.assertTrue(result.rag_selected_table_hit)
+        self.assertEqual(result.rag_final_chunk_kinds, ("table_summary",))
+        trace_payload = json.loads(result.trace_path.read_text(encoding="utf-8"))
+        self.assertEqual(trace_payload["rag"]["table_candidate_count"], 1)
+        self.assertEqual(trace_payload["rag"]["final_chunk_kinds"], ["table_summary"])
+        self.assertEqual(len(trace_payload["rag"]["ephemeral_table_candidates"]), 1)
 
 
 if __name__ == "__main__":
