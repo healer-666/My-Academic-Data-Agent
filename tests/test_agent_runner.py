@@ -5,6 +5,7 @@ import sys
 import unittest
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 
@@ -25,7 +26,8 @@ from data_analysis_agent.agent_runner import (
 from data_analysis_agent.config import RuntimeConfig
 from data_analysis_agent.data_context import DataContextSummary
 from data_analysis_agent.document_ingestion import IngestionResult
-from data_analysis_agent.reporting import ReportTelemetry
+from data_analysis_agent.memory import MemoryRecord, MemoryRetrievalResult, MemoryWriteResult
+from data_analysis_agent.reporting import EvidenceCoverage, ReportTelemetry
 from data_analysis_agent.prompts import build_system_prompt
 from data_analysis_agent.rag.query_builder import RetrievalQueryBundle
 from data_analysis_agent.rag.models import RagIndexResult, RagRetrievalResult, RetrievedChunk
@@ -176,6 +178,45 @@ class FakeRagService:
             table_candidate_count=len(tuple(ephemeral_candidates)),
             warnings=(),
         )
+
+
+class FakeMemoryService:
+    records = (
+        MemoryRecord(
+            memory_id="memory-project-alpha-analysis_summary",
+            memory_scope_key="project-alpha",
+            memory_type="analysis_summary",
+            run_id="run_previous",
+            source_report_path="outputs/run_previous/final_report.md",
+            detected_domain="biomedicine",
+            quality_mode="standard",
+            created_at="2026-04-05T12:00:00",
+            source_count=1,
+            review_status="accepted",
+            text="Keep biomarker interpretation conservative and non-causal.",
+            source_names=("guideline.md",),
+        ),
+    )
+    last_written_run_id = ""
+
+    def __init__(self, *, runtime_config, memory_base_dir=None):
+        self.runtime_config = runtime_config
+        self.memory_base_dir = memory_base_dir
+
+    def retrieve(self, *, memory_scope_key, user_query, data_context, top_k=4):
+        return MemoryRetrievalResult(
+            status="retrieved",
+            memory_scope_key=memory_scope_key,
+            retrieval_query=f"{user_query} | {', '.join(data_context.columns[:2])}",
+            records=self.records[:top_k],
+        )
+
+    def format_for_prompt(self, records, *, max_chars=2200):
+        return "\n".join(f"[{record.memory_type} | run={record.run_id}] {record.text}" for record in records)
+
+    def write_records(self, *, records, run_id):
+        self.__class__.last_written_run_id = run_id
+        return MemoryWriteResult(status="written", written_records=tuple(records))
 
 
 class AgentRunnerTests(unittest.TestCase):
@@ -721,6 +762,26 @@ class AgentRunnerTests(unittest.TestCase):
 
         self.assertEqual(reply.decision, "Reject")
         self.assertIn("could not be parsed", reply.critique)
+        self.assertEqual(reply.evidence_findings, ())
+
+    def test_reviewer_reply_parses_structured_evidence_findings(self):
+        reply = _safe_parse_reviewer_reply(
+            """
+            {
+              "decision": "Reject",
+              "critique": "1. 缺少知识性结论的行内引用。",
+              "evidence_findings": [
+                {"type": "missing_citation", "message": "结果解释段缺少引用。", "citation_label": ""},
+                {"type": "invalid_citation", "message": "引用标签不在证据目录中。", "citation_label": "[来源: unknown.md, p.8]"}
+              ]
+            }
+            """
+        )
+
+        self.assertEqual(reply.decision, "Reject")
+        self.assertEqual(len(reply.evidence_findings), 2)
+        self.assertEqual(reply.evidence_findings[0].finding_type, "missing_citation")
+        self.assertEqual(reply.evidence_findings[1].citation_label, "[来源: unknown.md, p.8]")
 
     def test_observation_summary_compresses_python_output(self):
         observation = json.dumps(
@@ -1136,12 +1197,29 @@ class AgentRunnerTests(unittest.TestCase):
             telemetry=telemetry,
             review_round=2,
             visual_review_summary="No major chart issues.",
+            evidence_register=(
+                RetrievedChunk(
+                    chunk_id="chunk-1",
+                    text="Guideline note on model comparison.",
+                    source_name="guideline.md",
+                    source_path="memory/guideline.md",
+                    page_number=2,
+                ),
+            ),
+            evidence_coverage=EvidenceCoverage(
+                status="missing_citations",
+                citation_count=0,
+                uncited_knowledge_sections_detected=("Discussion",),
+            ),
         )
 
         self.assertIn("Generated artifacts evidence", reviewer_task)
         self.assertIn("review_round_figures_generated_count: 1", reviewer_task)
         self.assertIn("chart.png", reviewer_task)
         self.assertIn("artifact_workflow_complete: True", reviewer_task)
+        self.assertIn("Evidence review context", reviewer_task)
+        self.assertIn("missing_citations", reviewer_task)
+        self.assertIn("RAG-guideline-md-chunk-1", reviewer_task)
 
     def test_build_system_prompt_mentions_pdf_small_table_constraints(self):
         prompt = build_system_prompt(
@@ -1250,7 +1328,7 @@ class AgentRunnerTests(unittest.TestCase):
                   "action": "finish",
                   "tool_name": "",
                   "tool_input": "",
-                  "final_answer": "# Data Analysis Report\\n\\n## Data Overview\\nDone.\\n\\n<telemetry>{\\"methods\\": [], \\"domain\\": \\"biomedicine\\", \\"tools_used\\": [], \\"search_used\\": false, \\"search_notes\\": \\"not triggered\\", \\"cleaned_data_saved\\": false, \\"cleaned_data_path\\": \\"\\", \\"figures_generated\\": []}</telemetry>"
+                  "final_answer": "# Data Analysis Report\\n\\n## Data Overview\\nDone.\\n\\n## Result Interpretation\\nBiomarker A usually reflects inflammatory burden. [来源: glossary.md]\\n\\n## Discussion\\nThe glossary context supports a cautious interpretation. [来源: glossary.md]\\n\\n<telemetry>{\\"methods\\": [], \\"domain\\": \\"biomedicine\\", \\"tools_used\\": [], \\"search_used\\": false, \\"search_notes\\": \\"not triggered\\", \\"cleaned_data_saved\\": false, \\"cleaned_data_path\\": \\"\\", \\"figures_generated\\": []}</telemetry>"
                 }
                 """,
             ]
@@ -1279,7 +1357,11 @@ class AgentRunnerTests(unittest.TestCase):
         self.assertEqual(result.rag_table_candidate_count, 0)
         self.assertEqual(result.rag_final_chunk_kinds, ("text_section",))
         self.assertFalse(result.rag_selected_table_hit)
+        self.assertEqual(result.rag_citation_count, 1)
+        self.assertEqual(result.rag_cited_sources, ("glossary.md",))
+        self.assertEqual(result.rag_evidence_coverage_status, "covered")
         self.assertIn("<Retrieved_Knowledge_Context>", llm.calls[0][1]["content"])
+        self.assertIn("<Retrieved_Evidence_Register>", llm.calls[0][1]["content"])
         trace_payload = json.loads(result.trace_path.read_text(encoding="utf-8"))
         self.assertEqual(trace_payload["rag"]["status"], "retrieved")
         self.assertEqual(trace_payload["rag"]["indexed_documents"], ["glossary.md"])
@@ -1291,6 +1373,10 @@ class AgentRunnerTests(unittest.TestCase):
         self.assertEqual(len(trace_payload["rag"]["reranked_chunks"]), 1)
         self.assertEqual(trace_payload["rag"]["table_candidate_count"], 0)
         self.assertEqual(trace_payload["rag"]["final_chunk_kinds"], ["text_section"])
+        self.assertEqual(trace_payload["rag"]["citation_count"], 1)
+        self.assertEqual(trace_payload["rag"]["cited_sources"], ["glossary.md"])
+        self.assertEqual(trace_payload["rag"]["evidence_coverage_status"], "covered")
+        self.assertEqual(len(trace_payload["rag"]["final_evidence_register"]), 1)
 
     def test_run_analysis_pdf_rag_uses_ephemeral_table_candidates(self):
         tmp_path = self._workspace_case_dir()
@@ -1397,6 +1483,82 @@ class AgentRunnerTests(unittest.TestCase):
         self.assertEqual(trace_payload["rag"]["table_candidate_count"], 1)
         self.assertEqual(trace_payload["rag"]["final_chunk_kinds"], ["table_summary"])
         self.assertEqual(len(trace_payload["rag"]["ephemeral_table_candidates"]), 1)
+
+    def test_run_analysis_injects_project_memory_and_writes_back_after_accept(self):
+        tmp_path = self._workspace_case_dir()
+        data_path = tmp_path / "sample.csv"
+        data_path.write_text("marker_a,marker_b\n1,2\n", encoding="utf-8")
+
+        runtime_config = RuntimeConfig(
+            model_id="demo-model",
+            api_key="demo-key",
+            base_url="https://example.com/v1",
+            timeout=30,
+            tavily_api_key=None,
+            embedding_model_id="text-embedding-demo",
+            embedding_api_key="embed-key",
+            embedding_base_url="https://embed.example.com/v1",
+            embedding_timeout=30,
+        )
+        llm = StubLLM(
+            [
+                """
+                {
+                  "decision": "The report is complete.",
+                  "action": "finish",
+                  "tool_name": "",
+                  "tool_input": "",
+                  "final_answer": "# Data Analysis Report\\n\\n## Result Interpretation\\nUse a conservative biomarker interpretation.\\n\\n## Discussion\\nKeep claims non-causal.\\n\\n<telemetry>{\\"methods\\": [], \\"domain\\": \\"biomedicine\\", \\"tools_used\\": [], \\"search_used\\": false, \\"search_notes\\": \\"not triggered\\", \\"cleaned_data_saved\\": false, \\"cleaned_data_path\\": \\"\\", \\"figures_generated\\": []}</telemetry>"
+                }
+                """,
+                """
+                {
+                  "decision": "Accept",
+                  "critique": "报告已满足当前要求。"
+                }
+                """,
+            ]
+        )
+        FakeMemoryService.last_written_run_id = ""
+
+        with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=runtime_config), patch(
+            "data_analysis_agent.agent_runner.build_llm", return_value=llm
+        ), patch(
+            "data_analysis_agent.agent_runner.build_tool_registry",
+            return_value=StubRegistry(cleaned_data_path=None, include_tavily=False),
+        ), patch(
+            "data_analysis_agent.agent_runner.ProjectMemoryService", FakeMemoryService
+        ), patch(
+            "data_analysis_agent.agent_runner.extract_memory_records"
+        ) as extract_mock:
+            extract_mock.return_value = SimpleNamespace(
+                records=FakeMemoryService.records,
+                llm_distilled=False,
+                warnings=(),
+            )
+
+            result = run_analysis(
+                data_path,
+                output_dir=tmp_path / "outputs",
+                quality_mode="standard",
+                use_memory=True,
+                memory_scope_key="project-alpha",
+            )
+
+        self.assertTrue(result.memory_enabled)
+        self.assertEqual(result.memory_scope_key, "project-alpha")
+        self.assertEqual(result.memory_match_count, 1)
+        self.assertEqual(result.memory_writeback_status, "written")
+        self.assertEqual(result.memory_written_count, 1)
+        self.assertIn("<Project_Memory_Context>", llm.calls[0][1]["content"])
+        self.assertIn("run_previous", llm.calls[0][1]["content"])
+        self.assertTrue(FakeMemoryService.last_written_run_id.startswith("run_"))
+        trace_payload = json.loads(result.trace_path.read_text(encoding="utf-8"))
+        self.assertEqual(trace_payload["memory"]["scope_key"], "project-alpha")
+        self.assertEqual(trace_payload["memory"]["retrieval_status"], "retrieved")
+        self.assertEqual(trace_payload["memory"]["writeback_status"], "written")
+        self.assertEqual(len(trace_payload["memory"]["retrieved_records"]), 1)
+        self.assertEqual(len(trace_payload["memory"]["written_record_ids"]), 1)
 
 
 if __name__ == "__main__":

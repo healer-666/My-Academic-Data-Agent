@@ -1,235 +1,227 @@
-<div align="center">
-<h1>Academic-Data-Agent</h1>
+# Academic-Data-Agent
 
-**面向科研与学术场景的数据分析 Agent 工作台**
+面向科研与学术数据分析场景的 `hello-agents` 二次开发项目。它不是通用聊天机器人，而是一套围绕“数据/文献输入 -> 分析执行 -> RAG 与证据归因 -> 审稿治理 -> 结果回放”的分析型 Agent 工作流系统。
 
-[![Python Version](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](#)
+当前文档已按 2026-04-05 的代码状态更新，和仓库中的 RAG、证据链、Project Memory、Web 工作台实现保持一致。
 
-[特性](#-核心特性) • [架构](#-系统架构) • [快速开始](#-快速开始) • [使用指南](#-使用指南) • [项目结构](#-项目结构)
-</div>
+## 项目定位
 
-## 📝 项目简介
+这个项目最准确的定位是：
 
-**Academic-Data-Agent** 是一个基于 HelloAgents 思路构建的科研数据分析 Agent 项目，目标是把“数据接入、分析执行、审稿治理、结果展示”串成一条可复现、可追踪、可演示的完整工作流。
+> 一个基于 `hello-agents` 底座、面向科研数据分析任务的受控 Agent workflow system。
 
-它既支持传统的 `csv / xls / xlsx` 表格数据，也支持文本型 PDF 文献的前置解析：提取论文背景、识别候选表格、选择主表进入正式定量分析，并结合其他候选表摘要与文献上下文生成结构化报告。
+这里的重点不是“用了多少模型”，而是：
 
-### 适用场景
+- 用显式工作流而不是自由聊天式 Agent 做数据分析
+- 用结构化工具协议约束模型行为
+- 用 RAG、证据归因、reviewer、trace 提高可信度
+- 用 Project Memory 复用已接受运行中的经验和偏好
 
-- 科研表格数据的自动清洗、统计分析与报告生成
-- 学术论文 PDF 中表格数据的抽取与结构化分析
-- 需要保留运行轨迹、图表工件、审稿记录的分析任务
-- 希望通过 Web 工作台快速查看历史运行结果与工件的场景
+## 当前能力概览
 
----
+### 1. 双输入主线
 
-## ✨ 核心特性
+- 支持 `csv / xls / xlsx`
+- 支持 PDF 文档 ingestion
+- PDF 路径可提取候选表、选择主表、生成 `parsed_document.json`
 
-### 1. 两类输入统一接入
+### 2. 受控分析工作流
 
-- **表格输入**：直接分析 `csv / xls / xlsx`
-- **PDF 输入**：先做文档解析，再进入正式分析主链
+- Analyst 主流程由 [`run_analysis(...)`](/C:/Users/pc/OneDrive/Desktop/agent/src/data_analysis_agent/agent_runner.py) 编排
+- 外层状态机固定为 `ingest -> context -> analyze_round -> validate -> review -> finalize`
+- 复杂逻辑已经从单体 runner 拆分到 `artifact_service / review_service / tooling_service / workflow_service`
 
-### 2. PDF 多表综合分析
+### 3. RAG v3 早期版
 
-- 自动抽取候选表格并选择主表
-- 主表负责正式定量分析
-- 其他候选表作为上下文证据参与报告解释
-- 自动注入论文摘要或前文背景，增强变量与任务语义理解
+- 本地 Chroma 持久化知识库
+- OpenAI-compatible embeddings
+- `query rewrite + hybrid retrieval + rule rerank`
+- `text_section + table_summary` 结构化 chunk
+- PDF 主表/候选表的临时检索增强
+- Web 端支持知识文档上传
 
-### 3. 自定义分析控制流
+### 4. 证据归因
 
-- 使用结构化 JSON 协议驱动分析步骤
-- 避免纯文本 Agent 在工具调用和结果解析上的脆弱性
-- 支持本地 Python 分析、图表生成与中间工件落盘
+- 最终注入的 RAG chunk 会生成稳定 `evidence_id`
+- Prompt 中包含 `<Retrieved_Evidence_Register>`
+- 知识性解释要求带行内短引用
+- Reviewer 会对缺失引用、无效引用、错配引用进行硬性检查
 
-### 4. 学术治理与审稿机制
+### 5. Project Memory
 
-- 内置小样本与统计汇报约束
-- 支持 `draft / standard / publication` 三档质量模式
-- 支持文本 Reviewer
-- 支持可选视觉 Reviewer，对图表可读性进行额外检查
+- 仅对 `accepted` 运行写回长期 memory
+- 写回内容是精炼条目，不是整份旧报告全文
+- 分析前和审稿前都能按 `memory_scope_key` 回忆项目经验
+- Memory 和 RAG 证据层分开建模，不混淆角色
 
-### 5. 完整的工作台与历史记录
+### 6. 可回放的工作台
 
-- Gradio Web UI 支持上传、预览、运行、回看
-- 自动保存 `cleaned_data.csv`、报告、图表、trace、review logs
-- 支持历史记录浏览与工件下载
+- Gradio 单页工作台
+- 历史运行记录与结果回看
+- 实时日志、运行摘要、审稿结果、trace、下载工件
+- History 页可查看旧 run 的高层状态
 
----
+## 架构总览
 
-## 🏗️ 系统架构
+```text
+输入文件
+  -> document_ingestion（仅 PDF）
+  -> data_context / knowledge_context
+  -> project memory recall
+  -> RAG retrieval + rerank + evidence register
+  -> ScientificReActRunner
+  -> ToolRegistry / PythonInterpreterTool / TavilySearchTool
+  -> report + telemetry + trace
+  -> reviewer / visual reviewer
+  -> accepted memory writeback
+  -> CLI / Web / history
+```
 
-当前项目可以理解为四层结构：
+### 关键模块
 
-### 1. 输入标准化层
+- [`agent_runner.py`](/C:/Users/pc/OneDrive/Desktop/agent/src/data_analysis_agent/agent_runner.py)
+  主编排入口，负责运行时 orchestration
+- [`document_ingestion.py`](/C:/Users/pc/OneDrive/Desktop/agent/src/data_analysis_agent/document_ingestion.py)
+  PDF 输入标准化
+- [`knowledge_context.py`](/C:/Users/pc/OneDrive/Desktop/agent/src/data_analysis_agent/knowledge_context.py)
+  用户意图、memory、reference、RAG、evidence register 的统一注入层
+- [`rag/`](/C:/Users/pc/OneDrive/Desktop/agent/src/data_analysis_agent/rag)
+  RAG 子系统
+- [`memory/`](/C:/Users/pc/OneDrive/Desktop/agent/src/data_analysis_agent/memory)
+  项目级经验记忆子系统
+- [`review_service.py`](/C:/Users/pc/OneDrive/Desktop/agent/src/data_analysis_agent/review_service.py)
+  文本审稿构造与日志落地
+- [`web/`](/C:/Users/pc/OneDrive/Desktop/agent/src/data_analysis_agent/web)
+  Gradio 工作台和历史回看
 
-- 区分表格文件与 PDF
-- PDF 先进入 `document_ingestion`
-- 输出主表、候选表摘要和文献背景
+## 快速开始
 
-### 2. 分析执行层
-
-- 由 `run_analysis(...)` 驱动主流程
-- 构建数据上下文
-- 调用本地 Python 工具完成清洗、分析、绘图与报告生成
-
-### 3. 审稿治理层
-
-- 文本 Reviewer 检查报告逻辑、统计表述与工件一致性
-- 可选视觉 Reviewer 检查图表展示质量
-
-### 4. 展示交互层
-
-- CLI 负责命令行运行与摘要展示
-- Gradio Web UI 负责文件上传、候选表预览、实时日志、结果回看与历史记录浏览
-
----
-
-## 🚀 快速开始
-
-### 环境要求
+### 1. 环境要求
 
 - Python 3.10+
 - 建议使用虚拟环境
 
-### 安装依赖
+### 2. 安装依赖
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 配置环境变量
+### 3. 配置 `.env`
 
-在项目根目录创建 `.env` 文件：
+至少需要主模型配置：
 
 ```env
 LLM_MODEL_ID=deepseek-chat
 LLM_BASE_URL=https://api.deepseek.com/v1
-LLM_API_KEY=your_api_key_here
+LLM_API_KEY=your_api_key
 LLM_TIMEOUT=120
+```
 
-# 可选：在线检索
-TAVILY_API_KEY=your_tavily_api_key_here
+可选能力：
 
-# 可选：视觉审稿
+```env
+TAVILY_API_KEY=your_tavily_key
+
+EMBEDDING_MODEL_ID=text-embedding-3-small
+EMBEDDING_BASE_URL=https://api.openai.com/v1
+EMBEDDING_API_KEY=your_embedding_key
+EMBEDDING_TIMEOUT=120
+
 VISION_LLM_MODEL_ID=your_vision_model
 VISION_LLM_BASE_URL=https://your-vision-endpoint/v1
-VISION_LLM_API_KEY=your_vision_api_key
+VISION_LLM_API_KEY=your_vision_key
 VISION_LLM_TIMEOUT=120
 ```
 
-### 命令行运行
+### 4. 命令行运行
 
 分析表格：
 
 ```bash
-python main.py --data data/simple_data.xls
+python main.py --data data/simple_data.xlsx --quality-mode standard
 ```
 
 分析 PDF：
 
 ```bash
-python main.py --data your_paper.pdf --quality-mode publication
+python main.py --data data/your_paper.pdf --quality-mode publication --document-ingestion-mode text_only
 ```
 
-### 启动 Web 工作台
+### 5. 启动 Web 工作台
 
 ```bash
 python gradio_app.py
 ```
 
----
-
-## 📖 使用指南
-
-### CLI 常用参数
-
-- `--data`
-- `--output-dir`
-- `--query`
-- `--quality-mode`
-- `--latency-mode`
-- `--document-ingestion-mode`
-- `--selected-table-id`
-- `--vision-review-mode`
-
-### 质量模式
-
-- `draft`：不审稿，直接输出初版
-- `standard`：默认允许 1 次返修
-- `publication`：默认允许 2 次返修，并可自动启用视觉审稿
-
-### Python API
+## Python API
 
 ```python
+from pathlib import Path
+
 from data_analysis_agent.agent_runner import run_analysis
 
 result = run_analysis(
-    data_path="data/simple_data.xls",
+    Path("data/simple_data.xlsx"),
     quality_mode="standard",
     latency_mode="auto",
+    use_rag=True,
+    use_memory=True,
+    memory_scope_key="demo-project",
 )
 
 print(result.report_path)
-print(result.cleaned_data_path)
 print(result.trace_path)
 print(result.review_status)
+print(result.rag_status)
+print(result.memory_writeback_status)
 ```
 
-### Web 工作台能力
+## Web 端当前可用能力
 
-- 文件上传
-- PDF 候选表预览
-- 主表手动覆盖选择
+- 数据文件上传
+- 知识文档上传
+- `use_rag` 开关
+- `use_memory` 开关
+- `memory_scope_label`
+- PDF 候选表预览与主表选择
 - 实时日志
-- 运行总览
+- 运行摘要
 - 最终报告
 - 图表画廊
 - 审稿结果
+- Trace / 诊断
+- 工件下载
 - 历史记录回看
 
----
+## RAG 与 Memory 的当前边界
 
-## 🖼️ 界面展示
+### RAG 当前已实现
 
-![主界面](images/image1.png)
----
-![历史记录](images/image2.png)
----
-![运行日志记录](images/image3.png)
+- 本地知识库
+- Hybrid retrieval
+- Structured chunking
+- PDF / 表格增强
+- 证据归因与 reviewer 校验
 
----
+### Memory 当前已实现
 
-## 📂 项目结构
+- 项目级 scope
+- accepted run 写回
+- 分析前回忆
+- 审稿前回忆
 
-```text
-.
-├─ data/                          示例数据
-├─ outputs/                       运行产物与 Web 上传缓存
-├─ src/
-│  └─ data_analysis_agent/
-│     ├─ agent_runner.py          主分析流程与审稿控制
-│     ├─ config.py                运行配置
-│     ├─ data_context.py          数据上下文构建
-│     ├─ document_ingestion.py    PDF 文档解析与主表选择
-│     ├─ prompts.py               Analyst / Reviewer Prompt
-│     ├─ reporting.py             报告提取与落盘
-│     ├─ vision_review.py         视觉审稿
-│     └─ web/                     Gradio 工作台
-├─ tests/                         单元测试
-├─ gradio_app.py                  Web 启动入口
-├─ main.py                        CLI 入口
-├─ requirements.txt
-└─ README.md
-```
+### 当前还没做的
 
----
+- 独立知识问答模式
+- 多跳动态检索
+- Cross-encoder / LLM reranker
+- 正式长期会话记忆网络
+- 完整离线 RAG 评测平台
 
-## 📦 运行产物
+## 运行产物
 
-每次运行都会在 `outputs/run_YYYYMMDD_HHMMSS/` 下生成独立工件，常见内容包括：
+每次运行都会生成独立目录：
 
 ```text
 outputs/run_YYYYMMDD_HHMMSS/
@@ -238,61 +230,55 @@ outputs/run_YYYYMMDD_HHMMSS/
 │  ├─ parsed_document.json
 │  └─ extracted_tables/
 ├─ figures/
-│  └─ review_round_1/
+│  └─ review_round_*/
 ├─ logs/
 │  ├─ agent_trace.json
 │  ├─ document_ingestion.json
-│  ├─ review_round_1_review.json
-│  └─ review_round_1_visual_review.json
-├─ review_round_1_report.md
-└─ final_report.md
+│  ├─ review_round_*_review.json
+│  └─ review_round_*_visual_review.json
+├─ final_report.md
+└─ review_round_*_report.md
 ```
 
----
+其中 [`agent_trace.json`](/C:/Users/pc/OneDrive/Desktop/agent/outputs) 现在会记录：
 
-## 📌 当前边界
+- workflow states
+- event stream
+- RAG payload
+- evidence coverage
+- memory retrieval / writeback
+- review history
 
-- PDF 当前优先支持文本型文献，不处理扫描件 OCR
-- PDF 多表综合目前仍然是“一张主表做正式定量分析”
-- 视觉审稿是辅助审查，不是重新执行整套分析
-- 在线检索与视觉模型依赖外部 API 配置
+## 测试
 
----
-
-## 🧪 测试状态
-
-当前项目已经覆盖：
-
-- 文档解析
-- 数据上下文
-- 主分析流程
-- Web 工作台
-- 历史记录
-- 审稿与视觉审稿
-
-当前本地全量测试通过数为 **76**。
+当前仓库测试基线已更新到：
 
 ```bash
-python -m unittest discover -s tests -v
+python -m unittest discover -s tests -q
 ```
 
----
+最近一次全量结果为 `104` 个测试通过。
 
-## 🤝 使用建议
+覆盖重点包括：
 
-- 表格任务优先直接上传 `csv/xls/xlsx`，路径最稳定、耗时也最短
-- PDF 任务建议先在 Web 前端预览候选表，再决定主表
-- 更重视速度时优先使用 `latency_mode=auto` 或 `fast`
-- 更重视报告质量与审稿约束时优先使用 `publication`
+- agent runner
+- document ingestion
+- RAG services
+- memory services
+- reviewer / evidence attribution
+- web service / web app
+- history / runtime helpers
 
-Academic-Data-Agent 更适合作为一个持续演进的科研数据分析 Agent 平台，而不是一次性脚本。它不仅追求“跑出结果”，也重视中间过程、图表、审稿意见与运行痕迹的完整保留。
+## 文档索引
 
-👥 致谢
+- [核心代码学习手册](/C:/Users/pc/OneDrive/Desktop/agent/docs/core-code-learning-manual.md)
+- [项目概念审计](/C:/Users/pc/OneDrive/Desktop/agent/docs/project-concept-audit.md)
+- [项目改进路线图](/C:/Users/pc/OneDrive/Desktop/agent/docs/project-improvement-roadmap.md)
+- [主链路拆解](/C:/Users/pc/OneDrive/Desktop/agent/docs/project-mainline-analysis.md)
+- [Token / Context / Review 说明](/C:/Users/pc/OneDrive/Desktop/agent/docs/token-context-review-explainer.md)
 
-### 特别鸣谢
+## 一句话总结
 
-* **Datawhale 社区**：提供学习资源与支持
-* **Hello-Agents 项目**：提供框架基础
-* **OpenAI & DeepSeek & Qwen**：LLM 技术支持
+这个项目现在最合适的描述不是“做了个数据分析聊天机器人”，而是：
 
-* * *
+> 基于 `hello-agents` 做了一个带有 PDF ingestion、工程化 RAG、证据归因、审稿治理和项目级 memory 的科研数据分析 Agent 工作台。

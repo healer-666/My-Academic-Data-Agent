@@ -13,6 +13,7 @@ if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
 from data_analysis_agent.config import RuntimeConfig
+from data_analysis_agent.knowledge_context import KnowledgeContextProvider
 from data_analysis_agent.rag.document_reader import chunk_documents, load_knowledge_documents
 from data_analysis_agent.rag.models import RetrievedChunk
 from data_analysis_agent.rag.query_builder import build_retrieval_queries
@@ -250,6 +251,8 @@ class RagServiceTests(unittest.TestCase):
         self.assertGreaterEqual(retrieval_result.keyword_match_count, 1)
         self.assertGreaterEqual(retrieval_result.match_count, 1)
         self.assertIn("glossary.md", retrieval_result.source_names)
+        self.assertTrue(retrieval_result.reranked_chunks[0].evidence_id.startswith("RAG-glossary-md-"))
+        self.assertEqual(retrieval_result.reranked_chunks[0].citation_label, "[来源: glossary.md]")
 
     def test_rag_service_keyword_only_match_still_returns_results(self):
         case_dir = self._workspace_case_dir()
@@ -400,6 +403,32 @@ class RagServiceTests(unittest.TestCase):
 
         self.assertEqual(reranked[0].chunk_kind, "table_summary")
         self.assertIn("selected_table", reranked[0].match_reasons)
+
+    def test_knowledge_context_provider_renders_evidence_register(self):
+        provider = KnowledgeContextProvider(max_retrieved_chars=400)
+        bundle = provider.collect(
+            data_context=type(
+                "_Ctx",
+                (),
+                {"background_literature_context": "", "columns": ("marker_a",)},
+            )(),
+            user_query="Explain biomarker A.",
+            retrieved_chunks=(
+                RetrievedChunk(
+                    chunk_id="chunk-1",
+                    text="Biomarker A usually reflects inflammatory burden.",
+                    source_name="glossary.md",
+                    source_path="memory/glossary.md",
+                ),
+            ),
+        )
+
+        rendered = bundle.render_for_prompt()
+
+        self.assertIn("<Retrieved_Knowledge_Context>", rendered)
+        self.assertIn("<Retrieved_Evidence_Register>", rendered)
+        self.assertIn("RAG-glossary-md-chunk-1", rendered)
+        self.assertIn("[来源: glossary.md]", rendered)
 
 
 if __name__ == "__main__":

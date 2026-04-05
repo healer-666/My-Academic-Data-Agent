@@ -4,6 +4,34 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import re
+
+
+def _slugify_source_name(value: str) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", "-", str(value or "").strip().lower()).strip("-")
+    return normalized or "source"
+
+
+def _build_source_locator(*, source_name: str, page_number: int | None, table_id: str, section_title: str) -> str:
+    parts = [str(source_name or "").strip() or "unknown"]
+    if table_id:
+        parts.append(table_id)
+    elif section_title:
+        parts.append(section_title)
+    if page_number is not None:
+        parts.append(f"p.{page_number}")
+    return " | ".join(part for part in parts if part)
+
+
+def _build_citation_label(*, source_name: str, page_number: int | None, table_id: str, section_title: str) -> str:
+    parts = [str(source_name or "").strip() or "unknown"]
+    if table_id:
+        parts.append(table_id)
+    elif section_title and page_number is None:
+        parts.append(section_title)
+    if page_number is not None:
+        parts.append(f"p.{page_number}")
+    return f"[来源: {', '.join(part for part in parts if part)}]"
 
 
 @dataclass(frozen=True)
@@ -89,6 +117,39 @@ class RetrievedChunk:
     keyword_score: float | None = None
     rerank_score: float | None = None
     match_reasons: tuple[str, ...] = ()
+    evidence_id: str = ""
+    citation_label: str = ""
+    source_locator: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.evidence_id:
+            object.__setattr__(
+                self,
+                "evidence_id",
+                f"RAG-{_slugify_source_name(self.source_name)}-{self.chunk_id}",
+            )
+        if not self.source_locator:
+            object.__setattr__(
+                self,
+                "source_locator",
+                _build_source_locator(
+                    source_name=self.source_name,
+                    page_number=self.page_number,
+                    table_id=self.table_id,
+                    section_title=self.section_title,
+                ),
+            )
+        if not self.citation_label:
+            object.__setattr__(
+                self,
+                "citation_label",
+                _build_citation_label(
+                    source_name=self.source_name,
+                    page_number=self.page_number,
+                    table_id=self.table_id,
+                    section_title=self.section_title,
+                ),
+            )
 
     @property
     def score(self) -> float | None:
@@ -123,6 +184,9 @@ class RetrievedChunk:
             "rerank_score": self.rerank_score,
             "score": self.score,
             "match_reasons": list(self.match_reasons),
+            "evidence_id": self.evidence_id,
+            "citation_label": self.citation_label,
+            "source_locator": self.source_locator,
             "text_excerpt": self.text[:320],
         }
 

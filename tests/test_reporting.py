@@ -10,7 +10,9 @@ SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
+from data_analysis_agent.rag.models import RetrievedChunk
 from data_analysis_agent.reporting import (
+    analyze_evidence_coverage,
     convert_markdown_images_to_gradio_urls,
     extract_report_and_telemetry,
     normalize_markdown_image_paths,
@@ -92,6 +94,64 @@ class ReportingTests(unittest.TestCase):
 
         self.assertIn("/file=", converted)
         self.assertIn("chart_gradio.png", converted)
+
+    def test_analyze_evidence_coverage_maps_inline_citations_to_register(self):
+        report = (
+            "# Data Analysis Report\n\n"
+            "## Result Interpretation\n"
+            "Biomarker A usually reflects inflammatory burden. [来源: glossary.md]\n\n"
+            "## Discussion\n"
+            "The literature context is consistent with the observed marker shift. [来源: guideline.md, p.2]"
+        )
+
+        coverage = analyze_evidence_coverage(
+            report,
+            evidence_register=(
+                RetrievedChunk(
+                    chunk_id="chunk-1",
+                    text="Biomarker A usually reflects inflammatory burden.",
+                    source_name="glossary.md",
+                    source_path="memory/glossary.md",
+                ),
+                RetrievedChunk(
+                    chunk_id="chunk-2",
+                    text="Guideline note on biomarker interpretation.",
+                    source_name="guideline.md",
+                    source_path="memory/guideline.md",
+                    page_number=2,
+                ),
+            ),
+        )
+
+        self.assertEqual(coverage.status, "covered")
+        self.assertEqual(coverage.citation_count, 2)
+        self.assertEqual(coverage.used_evidence_ids, ("RAG-glossary-md-chunk-1", "RAG-guideline-md-chunk-2"))
+        self.assertEqual(coverage.cited_sources, ("glossary.md", "guideline.md"))
+
+    def test_analyze_evidence_coverage_detects_invalid_and_missing_citations(self):
+        report = (
+            "# Data Analysis Report\n\n"
+            "## Result Interpretation\n"
+            "Biomarker A usually reflects inflammatory burden without attribution.\n\n"
+            "## Discussion\n"
+            "This conclusion cites a missing source. [来源: unknown.md, p.8]"
+        )
+
+        coverage = analyze_evidence_coverage(
+            report,
+            evidence_register=(
+                RetrievedChunk(
+                    chunk_id="chunk-1",
+                    text="Biomarker A usually reflects inflammatory burden.",
+                    source_name="glossary.md",
+                    source_path="memory/glossary.md",
+                ),
+            ),
+        )
+
+        self.assertEqual(coverage.status, "invalid_and_missing")
+        self.assertEqual(coverage.invalid_citation_labels, ("[来源: unknown.md, p.8]",))
+        self.assertEqual(coverage.uncited_knowledge_sections_detected, ("Result Interpretation",))
 
 
 if __name__ == "__main__":

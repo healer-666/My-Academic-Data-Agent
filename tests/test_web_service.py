@@ -211,6 +211,8 @@ class WebServiceTests(unittest.TestCase):
             event_handler("analysis_started", {"analysis_round": 1, "max_steps": 6})
             event_handler("review_accepted", {"review_round": 1, "critique": "Accepted."})
             self.assertEqual(kwargs["selected_table_id"], "table_02")
+            self.assertTrue(kwargs["use_memory"])
+            self.assertEqual(kwargs["memory_scope_key"], "project-alpha")
             return result
 
         with patch("data_analysis_agent.web.service.run_analysis", side_effect=fake_run_analysis):
@@ -233,14 +235,19 @@ class WebServiceTests(unittest.TestCase):
                     "Advanced Data Analyst",
                     "",
                     "demo-session",
+                    None,
+                    True,
+                    True,
+                    "project-alpha",
                 )
             )
 
         final_output = outputs[-1]
         self.assertIn("运行完成", final_output[0])
+        self.assertIn("Memory", final_output[0])
         self.assertIn("demo-domain", final_output[2])
         self.assertIn("候选表数量", final_output[3])
-        self.assertIn("PDF 多表综合", final_output[3])
+        self.assertIn("PDF 多表模式", final_output[3])
         self.assertIn("# Report", final_output[4])
         self.assertEqual(len(final_output[5]), 1)
         self.assertIn("审稿工作台", final_output[6])
@@ -258,8 +265,10 @@ class WebServiceTests(unittest.TestCase):
 
         def fake_run_analysis(*args, **kwargs):
             self.assertFalse(kwargs["use_rag"])
+            self.assertFalse(kwargs["use_memory"])
             self.assertEqual(len(kwargs["knowledge_paths"]), 1)
             self.assertTrue(str(kwargs["knowledge_paths"][0]).endswith("glossary.md"))
+            self.assertEqual(kwargs["memory_scope_key"], "memory-scope-demo")
             return result
 
         with patch("data_analysis_agent.web.service.run_analysis", side_effect=fake_run_analysis):
@@ -284,6 +293,8 @@ class WebServiceTests(unittest.TestCase):
                     "demo-session",
                     [knowledge.as_posix()],
                     False,
+                    False,
+                    "memory-scope-demo",
                 )
             )
 

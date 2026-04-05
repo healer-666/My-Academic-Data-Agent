@@ -99,6 +99,14 @@ class ParsedReviewerReply:
     decision: str
     critique: str
     raw_response: str = ""
+    evidence_findings: tuple["ReviewerEvidenceFinding", ...] = ()
+
+
+@dataclass(frozen=True)
+class ReviewerEvidenceFinding:
+    finding_type: str
+    message: str
+    citation_label: str = ""
 
 
 @dataclass(frozen=True)
@@ -119,6 +127,7 @@ class ReviewRecord:
     raw_response: str
     review_log_path: Path
     candidate_report_path: Path
+    evidence_findings: tuple[ReviewerEvidenceFinding, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -198,6 +207,15 @@ class AnalysisRunResult:
     rag_table_candidate_count: int = 0
     rag_final_chunk_kinds: tuple[str, ...] = ()
     rag_selected_table_hit: bool = False
+    rag_citation_count: int = 0
+    rag_cited_sources: tuple[str, ...] = ()
+    rag_evidence_coverage_status: str = "not_checked"
+    rag_uncited_sections_detected: tuple[str, ...] = ()
+    memory_enabled: bool = False
+    memory_scope_key: str = ""
+    memory_match_count: int = 0
+    memory_writeback_status: str = "disabled"
+    memory_written_count: int = 0
     total_duration_ms: int = 0
     llm_duration_ms: int = 0
     tool_duration_ms: int = 0

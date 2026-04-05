@@ -213,6 +213,9 @@ def build_history_choices(outputs_root: str | Path = "outputs") -> tuple[list[tu
 
 
 def _build_history_overview_html(entry: RunHistoryEntry) -> str:
+    memory_payload = entry.trace_payload.get("memory", {})
+    if not isinstance(memory_payload, dict):
+        memory_payload = {}
     table_shape = (
         f"{entry.selected_table_shape[0]} x {entry.selected_table_shape[1]}"
         if entry.selected_table_shape
@@ -228,6 +231,7 @@ def _build_history_overview_html(entry: RunHistoryEntry) -> str:
         ("文本审稿", review_status_label(entry.review_status)),
         ("视觉审稿", vision_review_status_label(entry.vision_review_status)),
         ("工作流", workflow_status_label(entry.workflow_complete)),
+        ("Memory", "启用" if bool(memory_payload.get("enabled", False)) else "关闭"),
     ]
     card_html = "".join(
         (
@@ -266,6 +270,15 @@ def _build_history_overview_html(entry: RunHistoryEntry) -> str:
         f"<div class='review-highlight-body'>{_escape(entry.vision_review_summary)}</div>"
         "</div>"
     )
+    memory_block = (
+        "<div class='review-highlight'>"
+        "<div class='review-status-pill'>Project Memory</div>"
+        f"<div class='review-highlight-body'>scope: {_escape(memory_payload.get('scope_key', 'N/A'))}<br>"
+        f"retrieval: {_escape(memory_payload.get('retrieval_status', 'unknown'))}<br>"
+        f"writeback: {_escape(memory_payload.get('writeback_status', 'unknown'))}<br>"
+        f"records: {_escape(len(memory_payload.get('retrieved_records', [])) if isinstance(memory_payload.get('retrieved_records'), list) else 0)}</div>"
+        "</div>"
+    )
 
     return (
         "<section class='results-overview'>"
@@ -273,6 +286,7 @@ def _build_history_overview_html(entry: RunHistoryEntry) -> str:
         f"<div class='section-subtitle'>记录时间：{_escape(entry.timestamp)}</div>"
         f"{ingestion_block}"
         f"<div class='metric-grid'>{card_html}</div>"
+        f"{memory_block}"
         f"{visual_block}"
         "</section>"
     )
@@ -280,6 +294,9 @@ def _build_history_overview_html(entry: RunHistoryEntry) -> str:
 
 def _build_history_trace_html(entry: RunHistoryEntry) -> str:
     payload = entry.trace_payload
+    memory_payload = payload.get("memory", {})
+    if not isinstance(memory_payload, dict):
+        memory_payload = {}
     step_traces = payload.get("step_traces", [])
     warnings: list[str] = []
     artifact_validation = payload.get("artifact_validation", {})
@@ -310,6 +327,15 @@ def _build_history_trace_html(entry: RunHistoryEntry) -> str:
     table_html = "".join(recent_rows) or "<tr><td colspan='3'>暂无可展示的轨迹摘要。</td></tr>"
 
     extra_rows = []
+    if memory_payload:
+        extra_rows.append(
+            "<tr>"
+            "<td>Project Memory</td>"
+            f"<td colspan='2'>scope={_escape(memory_payload.get('scope_key', 'N/A'))} | "
+            f"retrieval={_escape(memory_payload.get('retrieval_status', 'unknown'))} | "
+            f"writeback={_escape(memory_payload.get('writeback_status', 'unknown'))}</td>"
+            "</tr>"
+        )
     if entry.document_ingestion_log_path is not None:
         extra_rows.append(
             "<tr>"

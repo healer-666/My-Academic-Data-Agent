@@ -15,8 +15,10 @@ from .rag.models import RetrievedChunk
 class KnowledgeContextBundle:
     background_context: str = ""
     user_context: str = ""
+    memory_context: str = ""
     reference_context: str = ""
     retrieved_context: str = ""
+    retrieved_evidence_register: str = ""
 
     def render_for_prompt(self) -> str:
         sections: list[str] = []
@@ -25,6 +27,12 @@ class KnowledgeContextBundle:
                 "<User_Intent_Context>\n"
                 f"{self.user_context}\n"
                 "</User_Intent_Context>"
+            )
+        if self.memory_context:
+            sections.append(
+                "<Project_Memory_Context>\n"
+                f"{self.memory_context}\n"
+                "</Project_Memory_Context>"
             )
         if self.reference_context:
             sections.append(
@@ -37,6 +45,12 @@ class KnowledgeContextBundle:
                 "<Retrieved_Knowledge_Context>\n"
                 f"{self.retrieved_context}\n"
                 "</Retrieved_Knowledge_Context>"
+            )
+        if self.retrieved_evidence_register:
+            sections.append(
+                "<Retrieved_Evidence_Register>\n"
+                f"{self.retrieved_evidence_register}\n"
+                "</Retrieved_Evidence_Register>"
             )
         return "\n".join(sections).strip()
 
@@ -62,6 +76,7 @@ class KnowledgeContextProvider:
         *,
         data_context: DataContextSummary,
         user_query: str = "",
+        memory_context: str = "",
         reference_paths: Iterable[str | Path] = (),
         retrieved_chunks: Iterable[RetrievedChunk] = (),
     ) -> KnowledgeContextBundle:
@@ -80,7 +95,9 @@ class KnowledgeContextProvider:
                     f"[{path.name}] {normalized[: self.max_chars_per_reference]}"
                 )
         retrieved_lines: list[str] = []
+        evidence_lines: list[str] = []
         total_chars = 0
+        total_evidence_chars = 0
         sorted_chunks = sorted(
             retrieved_chunks,
             key=lambda chunk: (0 if str(chunk.chunk_kind or "") == "table_summary" else 1, -(chunk.score or 0.0)),
@@ -106,10 +123,26 @@ class KnowledgeContextProvider:
             total_chars += len(line)
             if total_chars >= self.max_retrieved_chars:
                 break
+        for chunk in sorted_chunks:
+            excerpt = " ".join(str(chunk.text or "").split()).strip()
+            if not excerpt:
+                continue
+            line = f"{chunk.evidence_id} -> {chunk.citation_label} -> {excerpt}"
+            remaining = self.max_retrieved_chars - total_evidence_chars
+            if remaining <= 0:
+                break
+            if len(line) > remaining:
+                line = line[:remaining].rstrip() + " ..."
+            evidence_lines.append(line)
+            total_evidence_chars += len(line)
+            if total_evidence_chars >= self.max_retrieved_chars:
+                break
 
         return KnowledgeContextBundle(
             background_context=data_context.background_literature_context,
             user_context=str(user_query or "").strip(),
+            memory_context=str(memory_context or "").strip(),
             reference_context="\n".join(reference_chunks).strip(),
             retrieved_context="\n".join(retrieved_lines).strip(),
+            retrieved_evidence_register="\n".join(evidence_lines).strip(),
         )

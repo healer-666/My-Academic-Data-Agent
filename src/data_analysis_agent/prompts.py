@@ -117,6 +117,13 @@ Execution rules:
 13. You have at most {max_steps} controller steps, so make each tool call complete and information-dense.
 14. {search_policy_block}
 15. Latency mode for this run: {latency_mode}. {fast_path_block}
+16. If the user context includes a <Retrieved_Evidence_Register> block, any knowledge-based interpretation that relies on retrieved background knowledge must include at least one inline citation label copied exactly from that register.
+17. Knowledge-based interpretation includes terminology explanations, domain meaning of indicators, literature background, guideline-style interpretation, and any explanation that uses non-primary PDF candidate tables as contextual evidence.
+18. Do not invent citation labels, source names, page numbers, table ids, or evidence ids. Use only the citation labels supplied in the evidence register.
+19. Statistical findings computed directly from the dataset do not require RAG citations unless you explicitly combine them with retrieved background knowledge in the same conclusion.
+20. If the user context includes a <Project_Memory_Context> block, treat it as historical project memory only: reusable preferences, previously accepted constraints, and prior framing hints.
+21. Project memory is not direct evidence for the current dataset. If project memory conflicts with the current data or retrieved evidence, follow the current data and current evidence.
+22. Do not cite project memory as if it were retrieved evidence. Inline citations may only use labels from <Retrieved_Evidence_Register>.
 
 Official plotting protocol / 官方绘图协议:
 - The only standard save API is save_figure(output_path).
@@ -180,6 +187,7 @@ Validation rules:
   - 讨论
   - 清洗后数据路径
   - 图表引用 such as ![图表]({figures_dir}/chart.png)
+  - When retrieved knowledge is used, the relevant explanation sentences must include inline short citations such as [来源: glossary.md, p.3]
   - If any hypothesis test was run, the report must include the test statistic, p-value, effect size, and 95% CI together.
   - If more than two groups were compared pairwise, the report must state the multiple-comparison correction method explicitly.
 """
@@ -203,6 +211,11 @@ def build_reviewer_prompt(review_mode: str, *, focus_major_issues: bool = False)
 - Verify that there are no obvious logical leaps, implausible claims, over-interpretation relative to the sample size, or conclusions that contradict the execution trace.
 - Verify that the report does not cite files, figures, or cleaned-data paths outside the current run directory contract.
 - Verify that the chosen methods match the data structure, including dependency, repeated measures, or time-series risks when present.
+- Verify that any knowledge-based explanation grounded in retrieved evidence includes at least one inline citation label taken from the supplied evidence register.
+- Reject if the report uses an inline citation label that does not appear in the supplied evidence register.
+- Reject if a cited evidence label is clearly mismatched with the claim it is supposed to support.
+- Reject if the report treats a non-primary PDF candidate table as formal quantitative evidence instead of contextual interpretation support.
+- Verify that the report does not clearly violate stable project-level preferences or reviewer constraints supplied in the project memory context.
 """
         decision_policy = """Decision policy:
 - Return "Accept" only if the report is publication-grade, internally coherent, statistically defensible, and adequately grounded in the supplied evidence.
@@ -218,6 +231,11 @@ def build_reviewer_prompt(review_mode: str, *, focus_major_issues: bool = False)
 - Verify that there are no obvious logical errors, broken artifact references, or contradictions with the execution trace.
 - Verify that the report does not confuse correlation with causation in a plainly misleading way.
 - Verify that the report does not cite files, figures, or cleaned-data paths outside the current run directory contract.
+- Verify that any knowledge-based explanation grounded in retrieved evidence includes at least one inline citation label taken from the supplied evidence register.
+- Reject if the report uses an inline citation label that does not appear in the supplied evidence register.
+- Reject if a cited evidence label is clearly mismatched with the claim it is supposed to support.
+- Reject if the report treats a non-primary PDF candidate table as formal quantitative evidence instead of contextual interpretation support.
+- Verify that the report does not clearly violate stable project-level preferences or reviewer constraints supplied in the project memory context.
 """
         decision_policy = """Decision policy:
 - Return "Accept" only if the report is coherent, well-supported, and free of major technical, logical, or artifact issues.
@@ -249,12 +267,20 @@ Output contract:
 - The JSON object must follow this schema:
 {{
   "decision": "Accept" or "Reject",
-  "critique": "Use Simplified Chinese. If Reject, provide a numbered actionable revision list in Chinese. If Accept, provide a short approval note in Chinese."
+  "critique": "Use Simplified Chinese. If Reject, provide a numbered actionable revision list in Chinese. If Accept, provide a short approval note in Chinese.",
+  "evidence_findings": [
+    {{
+      "type": "missing_citation" | "invalid_citation" | "citation_mismatch" | "other",
+      "message": "Use Simplified Chinese.",
+      "citation_label": "Optional; include when relevant."
+    }}
+  ]
 }}
 
 Validation rules:
 - decision must be exactly "Accept" or "Reject".
 - critique must be a non-empty Chinese string written in Simplified Chinese.
+- evidence_findings may be an empty list, but if citation issues exist you must enumerate them there as well as in critique.
 - Do not wrap the JSON in Markdown.
 """
 

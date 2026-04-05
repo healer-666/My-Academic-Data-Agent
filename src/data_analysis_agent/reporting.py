@@ -6,13 +6,32 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 from urllib.parse import quote
 
 
 _TELEMETRY_PATTERN = re.compile(r"\s*<telemetry>\s*(\{[\s\S]*?\})\s*</telemetry>\s*$", re.IGNORECASE)
 _MARKDOWN_IMAGE_PATTERN = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
+_INLINE_CITATION_PATTERN = re.compile(r"\[来源:\s*[^\]]+\]")
 _URL_SCHEMES = ("http://", "https://", "data:", "file://")
+_KNOWLEDGE_SECTION_HINTS = ("结果解释", "讨论", "结论", "背景", "result interpretation", "discussion", "conclusion", "background")
+_KNOWLEDGE_CONTENT_HINTS = (
+    "术语",
+    "背景",
+    "文献",
+    "指南",
+    "glossary",
+    "guideline",
+    "literature",
+    "通常",
+    "一般",
+    "意味着",
+    "提示",
+    "说明",
+    "reflects",
+    "indicates",
+    "suggests",
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -36,6 +55,24 @@ class ReportTelemetry:
 class ReportExtractionResult:
     report_markdown: str
     telemetry: ReportTelemetry
+
+
+@dataclass(frozen=True)
+class EvidenceCitation:
+    citation_label: str
+    evidence_ids: tuple[str, ...] = ()
+    source_names: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class EvidenceCoverage:
+    status: str = "not_checked"
+    citation_count: int = 0
+    used_evidence_ids: tuple[str, ...] = ()
+    used_citation_labels: tuple[str, ...] = ()
+    cited_sources: tuple[str, ...] = ()
+    invalid_citation_labels: tuple[str, ...] = ()
+    uncited_knowledge_sections_detected: tuple[str, ...] = ()
 
 
 def _normalize_string_list(value: Any) -> tuple[str, ...]:
@@ -98,6 +135,100 @@ def extract_markdown_report(result_text: str) -> str:
     """Extract only the human-facing Markdown report from the agent output."""
 
     return extract_report_and_telemetry(result_text).report_markdown
+
+
+def analyze_evidence_coverage(
+    report_markdown: str,
+    *,
+    evidence_register: Iterable[Any] = (),
+) -> EvidenceCoverage:
+    chunks = tuple(evidence_register or ())
+    if not chunks:
+        return EvidenceCoverage(status="not_applicable")
+
+    used_citation_labels = tuple(dict.fromkeys(_INLINE_CITATION_PATTERN.findall(report_markdown or "")))
+    label_map: dict[str, list[Any]] = {}
+    for chunk in chunks:
+        label = str(getattr(chunk, "citation_label", "") or "").strip()
+        if not label:
+            continue
+        label_map.setdefault(label, []).append(chunk)
+
+    used_evidence_ids: list[str] = []
+    cited_sources: list[str] = []
+    invalid_citation_labels: list[str] = []
+    for label in used_citation_labels:
+        matched_chunks = label_map.get(label, [])
+        if not matched_chunks:
+            invalid_citation_labels.append(label)
+            continue
+        for chunk in matched_chunks:
+            evidence_id = str(getattr(chunk, "evidence_id", "") or "").strip()
+            if evidence_id and evidence_id not in used_evidence_ids:
+                used_evidence_ids.append(evidence_id)
+            source_name = str(getattr(chunk, "source_name", "") or "").strip()
+            if source_name and source_name not in cited_sources:
+                cited_sources.append(source_name)
+
+    uncited_sections: list[str] = []
+    for title, body in _iter_markdown_sections(report_markdown or ""):
+        if not _looks_like_knowledge_section(title, body):
+            continue
+        if not _section_uses_knowledge_explanation(body):
+            continue
+        if not _INLINE_CITATION_PATTERN.search(body):
+            uncited_sections.append(title)
+
+    status = "covered"
+    if invalid_citation_labels and uncited_sections:
+        status = "invalid_and_missing"
+    elif invalid_citation_labels:
+        status = "invalid_citations"
+    elif uncited_sections:
+        status = "missing_citations"
+    elif not used_citation_labels:
+        status = "not_cited"
+
+    return EvidenceCoverage(
+        status=status,
+        citation_count=len(used_citation_labels),
+        used_evidence_ids=tuple(used_evidence_ids),
+        used_citation_labels=used_citation_labels,
+        cited_sources=tuple(cited_sources),
+        invalid_citation_labels=tuple(invalid_citation_labels),
+        uncited_knowledge_sections_detected=tuple(uncited_sections),
+    )
+
+
+def _iter_markdown_sections(report_markdown: str) -> list[tuple[str, str]]:
+    sections: list[tuple[str, str]] = []
+    current_title = "Document"
+    current_lines: list[str] = []
+    for line in str(report_markdown or "").splitlines():
+        match = re.match(r"^##+\s+(.+?)\s*$", line.strip())
+        if match:
+            if current_lines:
+                sections.append((current_title, "\n".join(current_lines).strip()))
+            current_title = match.group(1).strip()
+            current_lines = []
+            continue
+        current_lines.append(line)
+    if current_lines:
+        sections.append((current_title, "\n".join(current_lines).strip()))
+    return sections
+
+
+def _looks_like_knowledge_section(title: str, body: str) -> bool:
+    normalized_title = str(title or "").strip().lower()
+    normalized_body = str(body or "").strip().lower()
+    return any(hint in normalized_title for hint in _KNOWLEDGE_SECTION_HINTS) or any(
+        hint in normalized_body for hint in ("文献", "背景", "guideline", "literature", "glossary")
+    )
+
+
+def _section_uses_knowledge_explanation(body: str) -> bool:
+    normalized = str(body or "").strip().lower()
+    return any(hint in normalized for hint in _KNOWLEDGE_CONTENT_HINTS)
 
 
 def _resolve_markdown_asset_path(

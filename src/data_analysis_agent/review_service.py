@@ -8,11 +8,13 @@ from pathlib import Path
 from typing import Any
 
 from .data_context import DataContextSummary
-from .reporting import ReportTelemetry
+from .reporting import EvidenceCoverage, ReportTelemetry
+from .rag.models import RetrievedChunk
 from .runtime_models import (
     AgentStepTrace,
     ArtifactValidationResult,
     ParsedReviewerReply,
+    ReviewerEvidenceFinding,
     ReviewRecord,
     VisualReviewRecord,
 )
@@ -37,7 +39,13 @@ def parse_reviewer_reply(raw_response: str, extract_first_json_object: Any) -> P
     if not critique:
         raise ValueError("Reviewer field 'critique' must be a non-empty string.")
 
-    return ParsedReviewerReply(decision=decision, critique=critique, raw_response=raw_response)
+    evidence_findings = _parse_evidence_findings(payload.get("evidence_findings"))
+    return ParsedReviewerReply(
+        decision=decision,
+        critique=critique,
+        raw_response=raw_response,
+        evidence_findings=evidence_findings,
+    )
 
 
 def safe_parse_reviewer_reply(raw_response: str, extract_first_json_object: Any) -> ParsedReviewerReply:
@@ -49,6 +57,27 @@ def safe_parse_reviewer_reply(raw_response: str, extract_first_json_object: Any)
             f"Parsing issue: {exc}"
         )
         return ParsedReviewerReply(decision="Reject", critique=critique, raw_response=raw_response)
+
+
+def _parse_evidence_findings(value: Any) -> tuple[ReviewerEvidenceFinding, ...]:
+    if not isinstance(value, list):
+        return ()
+    findings: list[ReviewerEvidenceFinding] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        finding_type = str(item.get("type", "")).strip() or "other"
+        message = str(item.get("message", "")).strip()
+        if not message:
+            continue
+        findings.append(
+            ReviewerEvidenceFinding(
+                finding_type=finding_type,
+                message=message,
+                citation_label=str(item.get("citation_label", "")).strip(),
+            )
+        )
+    return tuple(findings)
 
 
 def should_attempt_vision_review(*, quality_mode: str, review_enabled: bool, vision_review_mode: str) -> bool:
@@ -94,6 +123,9 @@ def build_reviewer_task(
     telemetry: ReportTelemetry,
     review_round: int,
     visual_review_summary: str = "",
+    evidence_register: tuple[RetrievedChunk, ...] = (),
+    evidence_coverage: EvidenceCoverage | None = None,
+    memory_context: str = "",
 ) -> str:
     trace_lines = []
     for trace in step_traces:
@@ -120,6 +152,25 @@ def build_reviewer_task(
         )
     figures_block = "\n".join(figure_evidence_lines) if figure_evidence_lines else "- none"
     figures_dir = report_path.parent / "figures" / f"review_round_{review_round}"
+    coverage = evidence_coverage or EvidenceCoverage(status="not_checked")
+    evidence_lines = []
+    for chunk in evidence_register:
+        evidence_lines.append(
+            f"- {chunk.evidence_id} | {chunk.citation_label} | locator={chunk.source_locator} | excerpt={chunk.text[:180].strip()}"
+        )
+    evidence_register_block = "\n".join(evidence_lines) if evidence_lines else "- none"
+    cited_labels = "\n".join(f"- {item}" for item in coverage.used_citation_labels) if coverage.used_citation_labels else "- none"
+    invalid_labels = (
+        "\n".join(f"- {item}" for item in coverage.invalid_citation_labels)
+        if coverage.invalid_citation_labels
+        else "- none"
+    )
+    uncited_sections = (
+        "\n".join(f"- {item}" for item in coverage.uncited_knowledge_sections_detected)
+        if coverage.uncited_knowledge_sections_detected
+        else "- none"
+    )
+    memory_block = memory_context.strip() or "- none"
 
     return (
         f"Review round: {review_round}\n"
@@ -139,6 +190,21 @@ def build_reviewer_task(
         f"- artifact_warnings: {warnings}\n"
         "Generated figure list:\n"
         f"{figures_block}\n\n"
+        "Evidence review context:\n"
+        f"- evidence_coverage_status: {coverage.status}\n"
+        f"- citation_count: {coverage.citation_count}\n"
+        f"- used_evidence_ids: {', '.join(coverage.used_evidence_ids) if coverage.used_evidence_ids else 'none'}\n"
+        f"- cited_sources: {', '.join(coverage.cited_sources) if coverage.cited_sources else 'none'}\n"
+        "Final evidence register:\n"
+        f"{evidence_register_block}\n"
+        "Citations used in report:\n"
+        f"{cited_labels}\n"
+        "Invalid citation labels:\n"
+        f"{invalid_labels}\n"
+        "Uncited knowledge sections detected:\n"
+        f"{uncited_sections}\n\n"
+        "Project memory context:\n"
+        f"{memory_block}\n\n"
         + (
             "Visual figure audit summary:\n"
             f"{visual_review_summary}\n\n"
@@ -169,6 +235,14 @@ def save_review_log(
         "critique": reviewer_reply.critique,
         "raw_response": reviewer_reply.raw_response,
         "candidate_report_path": candidate_report_path.as_posix(),
+        "evidence_findings": [
+            {
+                "type": finding.finding_type,
+                "message": finding.message,
+                "citation_label": finding.citation_label,
+            }
+            for finding in reviewer_reply.evidence_findings
+        ],
     }
     review_log_path.parent.mkdir(parents=True, exist_ok=True)
     review_log_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -216,6 +290,14 @@ def serialize_review_history(review_history: tuple[ReviewRecord, ...]) -> list[d
             "raw_response": review.raw_response,
             "review_log_path": review.review_log_path.as_posix(),
             "candidate_report_path": review.candidate_report_path.as_posix(),
+            "evidence_findings": [
+                {
+                    "type": finding.finding_type,
+                    "message": finding.message,
+                    "citation_label": finding.citation_label,
+                }
+                for finding in review.evidence_findings
+            ],
         }
         for review in review_history
     ]

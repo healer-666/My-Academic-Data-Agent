@@ -31,6 +31,8 @@ class PromptGuardrailTests(unittest.TestCase):
         self.assertIn("Never report an isolated p-value", prompt)
         self.assertIn("strictly separate correlation from causation", prompt)
         self.assertIn("统计学治理说明", prompt)
+        self.assertIn("<Retrieved_Evidence_Register>", prompt)
+        self.assertIn("<Project_Memory_Context>", prompt)
 
     def test_system_prompt_can_include_background_literature_context(self):
         prompt = build_system_prompt(
@@ -70,6 +72,9 @@ class PromptGuardrailTests(unittest.TestCase):
         self.assertIn("effect size", publication_prompt)
         self.assertIn("95% CI", publication_prompt)
         self.assertIn("correlation with causation", publication_prompt)
+        self.assertIn("evidence register", publication_prompt)
+        self.assertIn("project memory context", publication_prompt)
+        self.assertIn("evidence_findings", publication_prompt)
 
 
 if __name__ == "__main__":

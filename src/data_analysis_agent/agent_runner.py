@@ -28,6 +28,7 @@ from .document_ingestion import IngestionResult, ingest_input_document
 from .events import EventHandler, EventRecorder, emit_event
 from .knowledge_context import KnowledgeContextProvider
 from .llm import build_llm
+from .memory import ProjectMemoryService, derive_memory_scope_key, extract_memory_records
 from .model_registry import ModelRegistry
 from .prompts import (
     DEFAULT_QUERY,
@@ -37,7 +38,9 @@ from .prompts import (
     build_system_prompt,
 )
 from .rag import RagService
+from .rag.models import RetrievedChunk
 from .reporting import (
+    analyze_evidence_coverage,
     ReportTelemetry,
     extract_report_and_telemetry,
     save_markdown_report,
@@ -60,6 +63,7 @@ from .runtime_models import (
     ParsedAgentReply,
     ParsedReviewerReply,
     ReviewRecord,
+    ReviewerEvidenceFinding,
     RunContext,
     VisualReviewRecord,
     WorkflowState,
@@ -156,6 +160,24 @@ def build_plaintext_event_handler() -> EventHandler:
             )
         elif event_type == "knowledge_retrieval_skipped":
             print(f"      Knowledge retrieval skipped: {payload.get('reason', '')}")
+        elif event_type == "memory_retrieval_started":
+            print(f"      Retrieving project memory | scope = {payload.get('scope_key', '')}")
+        elif event_type == "memory_retrieval_completed":
+            print(
+                f"      Project memory retrieval completed | status = {payload.get('status', 'unknown')} | "
+                f"matches = {payload.get('match_count', 0)}"
+            )
+        elif event_type == "memory_retrieval_skipped":
+            print(f"      Project memory retrieval skipped: {payload.get('reason', '')}")
+        elif event_type == "memory_writeback_started":
+            print(f"      Writing accepted run into project memory | scope = {payload.get('scope_key', '')}")
+        elif event_type == "memory_writeback_completed":
+            print(
+                f"      Project memory writeback completed | status = {payload.get('status', 'unknown')} | "
+                f"written = {payload.get('written_count', 0)}"
+            )
+        elif event_type == "memory_writeback_skipped":
+            print(f"      Project memory writeback skipped: {payload.get('reason', payload.get('status', ''))}")
         elif event_type == "tool_registry_ready":
             print(f"[5/7] Tool registry ready: {', '.join(payload.get('tools', []))}")
             print(
@@ -256,6 +278,29 @@ def _build_default_rag_payload(*, use_rag: bool, knowledge_base_dir: Path) -> di
         "retrieval_strategy": "hybrid",
         "retrieved_chunks": [],
         "final_chunk_kinds": [],
+        "final_evidence_register": [],
+        "citation_count": 0,
+        "cited_evidence_ids": [],
+        "cited_sources": [],
+        "evidence_coverage_status": "not_checked",
+        "uncited_sections_detected": [],
+        "invalid_citation_labels": [],
+        "warnings": [],
+    }
+
+
+def _build_default_memory_payload(*, use_memory: bool, memory_scope_key: str, memory_base_dir: Path) -> dict[str, Any]:
+    return {
+        "enabled": bool(use_memory),
+        "scope_key": str(memory_scope_key or ""),
+        "memory_base_dir": memory_base_dir.as_posix(),
+        "configured": False,
+        "status": "disabled" if not use_memory else "skipped",
+        "retrieval_status": "disabled" if not use_memory else "skipped",
+        "retrieval_query": "",
+        "retrieved_records": [],
+        "writeback_status": "disabled" if not use_memory else "skipped",
+        "written_record_ids": [],
         "warnings": [],
     }
 
@@ -656,6 +701,9 @@ def _build_reviewer_task(
     telemetry: ReportTelemetry,
     review_round: int,
     visual_review_summary: str = "",
+    evidence_register: tuple[RetrievedChunk, ...] = (),
+    evidence_coverage=None,
+    memory_context: str = "",
 ) -> str:
     return _build_reviewer_task_service(
         data_context=data_context,
@@ -666,6 +714,9 @@ def _build_reviewer_task(
         telemetry=telemetry,
         review_round=review_round,
         visual_review_summary=visual_review_summary,
+        evidence_register=evidence_register,
+        evidence_coverage=evidence_coverage,
+        memory_context=memory_context,
     )
 
 
@@ -729,6 +780,7 @@ def _save_agent_trace(
     workflow_states: tuple[WorkflowState, ...] = (),
     event_stream: tuple[Any, ...] = (),
     rag_payload: dict[str, Any] | None = None,
+    memory_payload: dict[str, Any] | None = None,
 ) -> Path:
     active_run_context = run_context or RunContext(
         run_id=run_dir.name,
@@ -774,6 +826,7 @@ def _save_agent_trace(
         workflow_states=workflow_states,
         event_stream=event_stream,
         rag_payload=rag_payload,
+        memory_payload=memory_payload,
     )
 
 
@@ -996,6 +1049,8 @@ def run_analysis(
     use_rag: bool = True,
     knowledge_paths: Iterable[str | Path] = (),
     knowledge_base_dir: str | Path | None = None,
+    use_memory: bool = True,
+    memory_scope_key: str | None = None,
 ) -> AnalysisRunResult:
     """Run the full data analysis workflow."""
 
@@ -1037,6 +1092,10 @@ def run_analysis(
     )
 
     source_path = Path(data_path).resolve()
+    resolved_memory_scope_key = derive_memory_scope_key(
+        explicit_scope_key=memory_scope_key,
+        source_path=source_path,
+    )
     run_context = build_run_context(
         source_path=source_path,
         output_dir=output_dir,
@@ -1149,8 +1208,15 @@ def run_analysis(
 
     knowledge_provider = KnowledgeContextProvider()
     active_knowledge_base_dir = Path(knowledge_base_dir or Path("memory") / "knowledge_base").resolve()
+    active_memory_base_dir = (Path("memory") / "project_memory").resolve()
     rag_payload = _build_default_rag_payload(use_rag=use_rag, knowledge_base_dir=active_knowledge_base_dir)
     rag_payload["configured"] = runtime_config.embedding_configured
+    memory_payload = _build_default_memory_payload(
+        use_memory=use_memory,
+        memory_scope_key=resolved_memory_scope_key,
+        memory_base_dir=active_memory_base_dir,
+    )
+    memory_payload["configured"] = runtime_config.embedding_configured
     rag_status = str(rag_payload["status"])
     rag_match_count = 0
     rag_dense_match_count = 0
@@ -1160,6 +1226,16 @@ def run_analysis(
     rag_table_candidate_count = 0
     rag_final_chunk_kinds: tuple[str, ...] = ()
     rag_selected_table_hit = False
+    rag_citation_count = 0
+    rag_cited_sources: tuple[str, ...] = ()
+    rag_evidence_coverage_status = "not_checked"
+    rag_uncited_sections_detected: tuple[str, ...] = ()
+    current_evidence_register: tuple[RetrievedChunk, ...] = ()
+    memory_match_count = 0
+    memory_writeback_status = "disabled" if not use_memory else "skipped"
+    memory_written_count = 0
+    memory_context_text = ""
+    memory_records = ()
     if knowledge_paths is None:
         knowledge_path_items = ()
     elif isinstance(knowledge_paths, (str, Path)):
@@ -1171,7 +1247,87 @@ def run_analysis(
         for path in knowledge_path_items
         if str(path or "").strip()
     )
-    knowledge_bundle = knowledge_provider.collect(data_context=data_context, user_query=query)
+    if not use_memory:
+        memory_payload["status"] = "disabled"
+        memory_payload["retrieval_status"] = "disabled"
+        _emit_event(
+            event_recorder.emit,
+            "memory_retrieval_skipped",
+            status="disabled",
+            reason="Memory is disabled for this run.",
+        )
+    elif not runtime_config.embedding_configured:
+        memory_payload["status"] = "skipped"
+        memory_payload["retrieval_status"] = "skipped"
+        memory_payload["warnings"].append("Embedding configuration is incomplete; skipping project memory retrieval.")
+        _emit_event(
+            event_recorder.emit,
+            "memory_retrieval_skipped",
+            status="skipped",
+            reason="Embedding configuration is incomplete; skipping project memory retrieval.",
+        )
+    else:
+        try:
+            memory_service = ProjectMemoryService(
+                runtime_config=runtime_config,
+                memory_base_dir=active_memory_base_dir,
+            )
+            _emit_event(
+                event_recorder.emit,
+                "memory_retrieval_started",
+                scope_key=resolved_memory_scope_key,
+                top_k=4,
+            )
+            retrieval_started_at = time.perf_counter()
+            memory_retrieval = memory_service.retrieve(
+                memory_scope_key=resolved_memory_scope_key,
+                user_query=query,
+                data_context=data_context,
+                top_k=4,
+            )
+            _accumulate_duration(
+                timing_breakdown,
+                "memory_retrieval_duration_ms",
+                _elapsed_ms(retrieval_started_at),
+            )
+            memory_payload["status"] = memory_retrieval.status
+            memory_payload["retrieval_status"] = memory_retrieval.status
+            memory_payload["retrieval_query"] = memory_retrieval.retrieval_query
+            memory_payload["warnings"].extend(memory_retrieval.warnings)
+            memory_payload["retrieved_records"] = [record.to_trace_dict() for record in memory_retrieval.records]
+            memory_records = memory_retrieval.records
+            memory_match_count = memory_retrieval.match_count
+            memory_context_text = memory_service.format_for_prompt(memory_records)
+            if memory_retrieval.status == "retrieved":
+                _emit_event(
+                    event_recorder.emit,
+                    "memory_retrieval_completed",
+                    status=memory_retrieval.status,
+                    scope_key=resolved_memory_scope_key,
+                    match_count=memory_match_count,
+                )
+            else:
+                _emit_event(
+                    event_recorder.emit,
+                    "memory_retrieval_skipped",
+                    status=memory_retrieval.status,
+                    reason="No project memory matched this scope.",
+                )
+        except Exception as exc:
+            memory_payload["status"] = "failed"
+            memory_payload["retrieval_status"] = "failed"
+            memory_payload["warnings"].append(f"Project memory retrieval failed: {exc}")
+            _emit_event(
+                event_recorder.emit,
+                "memory_retrieval_skipped",
+                status="failed",
+                reason=f"Project memory retrieval failed: {exc}",
+            )
+    knowledge_bundle = knowledge_provider.collect(
+        data_context=data_context,
+        user_query=query,
+        memory_context=memory_context_text,
+    )
     if not use_rag:
         rag_payload["status"] = "disabled"
         rag_status = "disabled"
@@ -1338,10 +1494,15 @@ def run_analysis(
                 if retrieval_result.status == "retrieved":
                     rag_match_count = retrieval_result.match_count
                     rag_sources_used = retrieval_result.source_names
+                    current_evidence_register = retrieval_result.reranked_chunks or retrieval_result.chunks
+                    rag_payload["final_evidence_register"] = [
+                        chunk.to_trace_dict() for chunk in current_evidence_register
+                    ]
                     knowledge_bundle = knowledge_provider.collect(
                         data_context=data_context,
                         user_query=query,
-                        retrieved_chunks=retrieval_result.reranked_chunks or retrieval_result.chunks,
+                        memory_context=memory_context_text,
+                        retrieved_chunks=current_evidence_register,
                     )
                     _emit_event(
                         event_recorder.emit,
@@ -1498,6 +1659,20 @@ def run_analysis(
         extraction = extract_report_and_telemetry(raw_result)
         report_markdown = extraction.report_markdown
         telemetry = extraction.telemetry
+        evidence_coverage = analyze_evidence_coverage(
+            report_markdown,
+            evidence_register=current_evidence_register,
+        )
+        rag_citation_count = evidence_coverage.citation_count
+        rag_cited_sources = evidence_coverage.cited_sources
+        rag_evidence_coverage_status = evidence_coverage.status
+        rag_uncited_sections_detected = evidence_coverage.uncited_knowledge_sections_detected
+        rag_payload["citation_count"] = rag_citation_count
+        rag_payload["cited_evidence_ids"] = list(evidence_coverage.used_evidence_ids)
+        rag_payload["cited_sources"] = list(rag_cited_sources)
+        rag_payload["evidence_coverage_status"] = rag_evidence_coverage_status
+        rag_payload["uncited_sections_detected"] = list(rag_uncited_sections_detected)
+        rag_payload["invalid_citation_labels"] = list(evidence_coverage.invalid_citation_labels)
 
         round_report_path = run_dir / f"review_round_{review_round}_report.md"
         analysis_rounds.append(
@@ -1565,6 +1740,7 @@ def run_analysis(
             workflow_states=workflow_tracker.snapshot(),
             event_stream=event_recorder.snapshot(),
             rag_payload=rag_payload,
+            memory_payload=memory_payload,
         )
         _accumulate_duration(timing_breakdown, "trace_persist_duration_ms", _elapsed_ms(trace_persist_started_at))
 
@@ -1676,6 +1852,9 @@ def run_analysis(
                     telemetry=telemetry,
                     review_round=review_round,
                     visual_review_summary=_build_visual_review_summary(visual_review_result),
+                    evidence_register=current_evidence_register,
+                    evidence_coverage=evidence_coverage,
+                    memory_context=memory_context_text,
                 ),
             },
         ]
@@ -1706,6 +1885,7 @@ def run_analysis(
                 raw_response=reviewer_reply.raw_response,
                 review_log_path=saved_review_log_path,
                 candidate_report_path=saved_report_path,
+                evidence_findings=reviewer_reply.evidence_findings,
             )
         )
         review_rounds_used = review_round
@@ -1761,6 +1941,143 @@ def run_analysis(
     timing_snapshot = dict(timing_breakdown)
     timing_snapshot["total_duration_ms"] = _elapsed_ms(run_started_at)
 
+    if review_status == "accepted" and use_memory and runtime_config.embedding_configured:
+        try:
+            _emit_event(
+                event_recorder.emit,
+                "memory_writeback_started",
+                scope_key=resolved_memory_scope_key,
+                run_id=run_context.run_id,
+            )
+            provisional_result = AnalysisRunResult(
+                data_context=data_context,
+                raw_result=raw_result,
+                report_markdown=report_markdown,
+                report_path=saved_report_path,
+                output_dir=run_dir,
+                run_dir=run_dir,
+                data_dir=data_dir,
+                figures_dir=figures_dir,
+                logs_dir=logs_dir,
+                trace_path=trace_path,
+                cleaned_data_path=cleaned_data_path,
+                agent_type=current_runner.__class__.__name__ if current_runner is not None else ScientificReActRunner.__name__,
+                step_traces=step_traces_tuple,
+                telemetry=telemetry,
+                methods_used=telemetry.methods,
+                detected_domain=telemetry.domain,
+                tools_used=tools_used,
+                search_status=search_status,
+                search_notes=search_notes,
+                workflow_complete=artifact_validation.workflow_complete,
+                workflow_warnings=artifact_validation.warnings,
+                missing_artifacts=artifact_validation.missing_artifacts,
+                quality_mode=resolved_quality_mode,
+                review_enabled=review_enabled,
+                review_status=review_status,
+                review_rounds_used=review_rounds_used,
+                review_critique=review_critique,
+                review_log_paths=tuple(review.review_log_path for review in review_history),
+                input_kind=document_ingestion.input_kind,
+                document_ingestion_status=document_ingestion.status,
+                document_ingestion_summary=document_ingestion.summary,
+                document_ingestion_duration_ms=timing_snapshot.get("document_ingestion_duration_ms", 0),
+                document_ingestion_log_path=document_ingestion.log_path,
+                candidate_table_count=document_ingestion.candidate_table_count,
+                selected_table_id=document_ingestion.selected_table_id,
+                selected_table_shape=document_ingestion.selected_table_shape,
+                pdf_multi_table_mode=document_ingestion.pdf_multi_table_mode,
+                latency_mode=resolved_latency_mode,
+                vision_review_mode=resolved_vision_review_mode,
+                vision_review_enabled=visual_attempt_enabled if review_enabled else False,
+                vision_review_status=vision_review_status,
+                vision_review_summary=vision_review_summary,
+                vision_review_duration_ms=timing_snapshot.get("vision_review_duration_ms", 0),
+                vision_review_log_paths=tuple(review.log_path for review in visual_review_history),
+                rag_enabled=use_rag,
+                rag_status=rag_status,
+                rag_match_count=rag_match_count,
+                rag_sources_used=rag_sources_used,
+                rag_dense_match_count=rag_dense_match_count,
+                rag_keyword_match_count=rag_keyword_match_count,
+                rag_retrieval_strategy=rag_retrieval_strategy,
+                rag_table_candidate_count=rag_table_candidate_count,
+                rag_final_chunk_kinds=rag_final_chunk_kinds,
+                rag_selected_table_hit=rag_selected_table_hit,
+                rag_citation_count=rag_citation_count,
+                rag_cited_sources=rag_cited_sources,
+                rag_evidence_coverage_status=rag_evidence_coverage_status,
+                rag_uncited_sections_detected=rag_uncited_sections_detected,
+                memory_enabled=use_memory,
+                memory_scope_key=resolved_memory_scope_key,
+                memory_match_count=memory_match_count,
+                memory_writeback_status=memory_writeback_status,
+                memory_written_count=memory_written_count,
+                total_duration_ms=timing_snapshot.get("total_duration_ms", 0),
+                llm_duration_ms=timing_snapshot.get("llm_duration_ms", 0),
+                tool_duration_ms=timing_snapshot.get("tool_duration_ms", 0),
+                review_duration_ms=timing_snapshot.get("review_duration_ms", 0),
+                timing_breakdown=timing_snapshot,
+            )
+            extraction_result = extract_memory_records(
+                result=provisional_result,
+                review_history=tuple(review_history),
+                memory_scope_key=resolved_memory_scope_key,
+                llm=llm,
+            )
+            memory_payload["warnings"].extend(extraction_result.warnings)
+            memory_service = ProjectMemoryService(
+                runtime_config=runtime_config,
+                memory_base_dir=active_memory_base_dir,
+            )
+            write_started_at = time.perf_counter()
+            memory_write = memory_service.write_records(
+                records=extraction_result.records,
+                run_id=run_context.run_id,
+            )
+            _accumulate_duration(
+                timing_breakdown,
+                "memory_writeback_duration_ms",
+                _elapsed_ms(write_started_at),
+            )
+            memory_writeback_status = memory_write.status
+            memory_written_count = memory_write.written_count
+            memory_payload["writeback_status"] = memory_write.status
+            memory_payload["written_record_ids"] = [record.memory_id for record in memory_write.written_records]
+            memory_payload["llm_distilled"] = extraction_result.llm_distilled
+            memory_payload["warnings"].extend(memory_write.warnings)
+            _emit_event(
+                event_recorder.emit,
+                "memory_writeback_completed" if memory_write.status in {"written", "already_written"} else "memory_writeback_skipped",
+                status=memory_write.status,
+                scope_key=resolved_memory_scope_key,
+                written_count=memory_written_count,
+            )
+        except Exception as exc:
+            memory_writeback_status = "failed"
+            memory_payload["writeback_status"] = "failed"
+            memory_payload["warnings"].append(f"Project memory writeback failed: {exc}")
+            _emit_event(
+                event_recorder.emit,
+                "memory_writeback_skipped",
+                status="failed",
+                reason=f"Project memory writeback failed: {exc}",
+            )
+    else:
+        if not use_memory:
+            memory_writeback_status = "disabled"
+        elif review_status != "accepted":
+            memory_writeback_status = "not_accepted"
+        elif not runtime_config.embedding_configured:
+            memory_writeback_status = "skipped"
+        memory_payload["writeback_status"] = memory_writeback_status
+        _emit_event(
+            event_recorder.emit,
+            "memory_writeback_skipped",
+            status=memory_writeback_status,
+            reason="Project memory writeback not triggered for this run.",
+        )
+
     final_trace_persist_started_at = time.perf_counter()
     _save_agent_trace(
         trace_path=trace_path,
@@ -1793,6 +2110,7 @@ def run_analysis(
         workflow_states=workflow_tracker.snapshot(),
         event_stream=event_recorder.snapshot(),
         rag_payload=rag_payload,
+        memory_payload=memory_payload,
     )
     _accumulate_duration(
         timing_breakdown,
@@ -1875,6 +2193,15 @@ def run_analysis(
         rag_table_candidate_count=rag_table_candidate_count,
         rag_final_chunk_kinds=rag_final_chunk_kinds,
         rag_selected_table_hit=rag_selected_table_hit,
+        rag_citation_count=rag_citation_count,
+        rag_cited_sources=rag_cited_sources,
+        rag_evidence_coverage_status=rag_evidence_coverage_status,
+        rag_uncited_sections_detected=rag_uncited_sections_detected,
+        memory_enabled=use_memory,
+        memory_scope_key=resolved_memory_scope_key,
+        memory_match_count=memory_match_count,
+        memory_writeback_status=memory_writeback_status,
+        memory_written_count=memory_written_count,
         total_duration_ms=final_timing_breakdown.get("total_duration_ms", 0),
         llm_duration_ms=final_timing_breakdown.get("llm_duration_ms", 0),
         tool_duration_ms=final_timing_breakdown.get("tool_duration_ms", 0),

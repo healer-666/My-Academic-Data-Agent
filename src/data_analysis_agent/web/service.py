@@ -12,6 +12,7 @@ from typing import Generator
 
 from ..agent_runner import AnalysisRunResult, run_analysis
 from ..document_ingestion import preview_pdf_tables
+from ..memory import derive_memory_scope_key
 from ..reporting import convert_markdown_images_to_gradio_urls
 from .viewmodels import (
     build_download_paths,
@@ -77,7 +78,8 @@ def create_run_bundle(run_dir: str | Path) -> Path:
 
 def _empty_overview(title: str, body: str) -> str:
     return (
-        "<section class='results-overview'>"
+        "<section class='results-overview empty-state-shell'>"
+        "<div class='empty-state-badge'>Workspace</div>"
         f"<div class='section-heading'>{title}</div>"
         f"<div class='empty-panel'>{body}</div>"
         "</section>"
@@ -221,6 +223,7 @@ def _result_outputs(
         f"运行完成。质量档位：{result.quality_mode}；"
         f"文档解析状态：{result.document_ingestion_status}；"
         f"RAG：{result.rag_status}；"
+        f"Memory：{result.memory_writeback_status}；"
         f"文本审稿状态：{result.review_status}；"
         f"视觉审稿状态：{result.vision_review_status}；"
         f"返修轮次：{result.review_rounds_used}。"
@@ -270,6 +273,8 @@ def stream_analysis_session(
     session_label: str,
     knowledge_uploads: str | Path | list[str] | list[Path] | tuple[str | Path, ...] | None = None,
     use_rag: bool = True,
+    use_memory: bool = True,
+    memory_scope_label: str = "",
 ) -> Generator[tuple[object, ...], None, None]:
     logs: list[str] = []
     if not uploaded_file:
@@ -277,6 +282,10 @@ def stream_analysis_session(
         return
 
     session_id = build_session_id(session_label)
+    resolved_memory_scope_key = derive_memory_scope_key(
+        session_label=memory_scope_label or session_label,
+        source_path=uploaded_file,
+    )
     uploads_root = Path(output_dir) / "web_uploads"
     try:
         copied_file = copy_uploaded_file(uploaded_file, uploads_root=uploads_root, session_id=session_id)
@@ -327,6 +336,8 @@ def stream_analysis_session(
                 event_handler=handle_event,
                 knowledge_paths=copied_knowledge_files,
                 use_rag=bool(use_rag),
+                use_memory=bool(use_memory),
+                memory_scope_key=resolved_memory_scope_key,
             )
             event_queue.put(("result", result))
         except Exception as exc:

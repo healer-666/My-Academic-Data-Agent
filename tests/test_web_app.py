@@ -86,6 +86,7 @@ class _FakeGradio(types.SimpleNamespace):
             Dropdown=_component_factory("Dropdown"),
             Slider=_component_factory("Slider"),
             Number=_component_factory("Number"),
+            Checkbox=_component_factory("Checkbox"),
             Markdown=_component_factory("Markdown"),
             Gallery=_component_factory("Gallery"),
             HTML=_component_factory("HTML"),
@@ -118,9 +119,10 @@ class WebAppTests(unittest.TestCase):
 
         self.assertIsInstance(demo, _FakeComponent)
         self.assertEqual(demo.component_type, "Blocks")
+        self.assertEqual(demo.kwargs.get("title"), "Academic-Data-Agent 交互工作台")
         self.assertIn("theme", demo.kwargs)
         self.assertIn("css", demo.kwargs)
-        self.assertIn("min-height: 700px", demo.kwargs["css"])
+        self.assertIn("min-height:700px", demo.kwargs["css"].replace(" ", ""))
         self.assertNotIn("position: sticky", demo.kwargs["css"])
 
         text_fragments = [
@@ -128,19 +130,21 @@ class WebAppTests(unittest.TestCase):
             for component in _FakeComponent.instances
             if component.args and isinstance(component.args[0], str)
         ]
-        self.assertTrue(any("Academic-Data-Agent 交互工作台" in text for text in text_fragments))
+        self.assertTrue(any("Academic Data Agent" in text for text in text_fragments))
         self.assertTrue(any("运行总览" in text for text in text_fragments))
-        self.assertTrue(any("历史记录" in text for text in text_fragments))
+        self.assertTrue(any("历史与导航" in text for text in text_fragments))
 
         column_components = [component for component in _FakeComponent.instances if component.component_type == "Column"]
         group_components = [component for component in _FakeComponent.instances if component.component_type == "Group"]
         self.assertGreaterEqual(len(column_components), 2)
-        self.assertGreaterEqual(len(group_components), 1)
+        self.assertGreaterEqual(len(group_components), 2)
 
         labels = [component.kwargs.get("label") for component in _FakeComponent.instances]
         self.assertIn("报告质量档位", labels)
         self.assertIn("文档解析模式", labels)
         self.assertIn("视觉审稿", labels)
+        self.assertIn("启用 Project Memory 回忆", labels)
+        self.assertIn("Memory scope 标签", labels)
         self.assertIn("主表选择", labels)
         self.assertIn("历史运行记录", labels)
 
@@ -149,7 +153,9 @@ class WebAppTests(unittest.TestCase):
         self.assertIn(".pdf", upload_component.kwargs["file_types"])
 
         logs_box = next(
-            component for component in _FakeComponent.instances if component.component_type == "Textbox" and component.kwargs.get("label") == "运行事件流"
+            component
+            for component in _FakeComponent.instances
+            if component.component_type == "Textbox" and component.kwargs.get("label") == "运行事件流"
         )
         self.assertEqual(logs_box.kwargs["lines"], 30)
         self.assertIn("live-log-box", logs_box.kwargs["elem_classes"])
@@ -165,9 +171,6 @@ class WebAppTests(unittest.TestCase):
         self.assertFalse(run_button.click_calls[0][1]["api_name"])
         self.assertFalse(preview_button.click_calls[0][1]["api_name"])
 
-        upload_component = next(
-            component for component in file_components if component.kwargs.get("label") == "数据文件"
-        )
         self.assertEqual(len(upload_component.change_calls), 1)
         self.assertFalse(upload_component.change_calls[0][1]["api_name"])
 
