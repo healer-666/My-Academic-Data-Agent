@@ -1,4 +1,3 @@
-# Academic-Data-Agent
 
 <div align="center">
 <h1>Academic-Data-Agent</h1>
