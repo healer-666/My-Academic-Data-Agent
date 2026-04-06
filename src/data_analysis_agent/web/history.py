@@ -222,16 +222,12 @@ def _build_history_overview_html(entry: RunHistoryEntry) -> str:
         else "unknown"
     )
     cards = [
-        ("运行目录", entry.run_dir.name),
-        ("识别领域", entry.domain),
-        ("输入类型", input_kind_label(entry.input_kind)),
-        ("报告质量", quality_mode_label(entry.quality_mode)),
-        ("延迟模式", latency_mode_label(entry.latency_mode)),
-        ("文档解析", ingestion_status_label(entry.document_ingestion_status)),
+        ("时间", entry.timestamp),
+        ("领域", entry.domain),
+        ("输入", input_kind_label(entry.input_kind)),
+        ("质量", quality_mode_label(entry.quality_mode)),
         ("文本审稿", review_status_label(entry.review_status)),
-        ("视觉审稿", vision_review_status_label(entry.vision_review_status)),
         ("工作流", workflow_status_label(entry.workflow_complete)),
-        ("Memory", "启用" if bool(memory_payload.get("enabled", False)) else "关闭"),
     ]
     card_html = "".join(
         (
@@ -247,20 +243,19 @@ def _build_history_overview_html(entry: RunHistoryEntry) -> str:
         multi_table = "已启用" if entry.pdf_multi_table_mode else "未启用"
         ingestion_block = (
             "<div class='review-highlight'>"
-            "<div class='review-status-pill'>文档解析总览</div>"
-            f"<div class='review-highlight-body'>解析状态：{_escape(ingestion_status_label(entry.document_ingestion_status))}<br>"
+            "<div class='review-status-pill'>PDF 主表</div>"
+            f"<div class='review-highlight-body'>状态：{_escape(ingestion_status_label(entry.document_ingestion_status))}<br>"
             f"候选表数量：{_escape(entry.candidate_table_count)}<br>"
-            f"主表 ID：{_escape(entry.selected_table_id or 'unknown')}<br>"
-            f"主表形状：{_escape(table_shape)}<br>"
-            f"PDF 多表综合：{_escape(multi_table)}<br>"
-            f"{_escape(entry.document_ingestion_summary or '暂无文档解析摘要。')}</div>"
+            f"主表：{_escape(entry.selected_table_id or 'unknown')}<br>"
+            f"形状：{_escape(table_shape)}<br>"
+            f"PDF 多表综合：{_escape(multi_table)}</div>"
             "</div>"
         )
     else:
         ingestion_block = (
             "<div class='review-highlight'>"
-            "<div class='review-status-pill'>文档解析总览</div>"
-            "<div class='review-highlight-body'>输入已是结构化表格，无需文档解析。</div>"
+            "<div class='review-status-pill'>文档解析</div>"
+            "<div class='review-highlight-body'>输入已是结构化表格，无需额外解析。</div>"
             "</div>"
         )
 
@@ -273,17 +268,16 @@ def _build_history_overview_html(entry: RunHistoryEntry) -> str:
     memory_block = (
         "<div class='review-highlight'>"
         "<div class='review-status-pill'>Project Memory</div>"
-        f"<div class='review-highlight-body'>scope: {_escape(memory_payload.get('scope_key', 'N/A'))}<br>"
-        f"retrieval: {_escape(memory_payload.get('retrieval_status', 'unknown'))}<br>"
-        f"writeback: {_escape(memory_payload.get('writeback_status', 'unknown'))}<br>"
-        f"records: {_escape(len(memory_payload.get('retrieved_records', [])) if isinstance(memory_payload.get('retrieved_records'), list) else 0)}</div>"
+        f"<div class='review-highlight-body'>状态：{'启用' if bool(memory_payload.get('enabled', False)) else '关闭'}<br>"
+        f"Scope：{_escape(memory_payload.get('scope_key', 'N/A'))}<br>"
+        f"命中：{_escape(len(memory_payload.get('retrieved_records', [])) if isinstance(memory_payload.get('retrieved_records'), list) else 0)} 条</div>"
         "</div>"
     )
 
     return (
         "<section class='results-overview'>"
         "<div class='section-heading'>历史运行总览</div>"
-        f"<div class='section-subtitle'>记录时间：{_escape(entry.timestamp)}</div>"
+        f"<div class='section-subtitle'>{_escape(entry.run_dir.name)}</div>"
         f"{ingestion_block}"
         f"<div class='metric-grid'>{card_html}</div>"
         f"{memory_block}"

@@ -97,7 +97,7 @@ class _FakeGradio(types.SimpleNamespace):
 
 
 class WebAppTests(unittest.TestCase):
-    def test_build_demo_constructs_dashboard_layout_without_runtime_errors(self):
+    def test_build_demo_constructs_multi_page_chinese_workbench(self):
         _FakeComponent.instances = []
         fake_gradio = _FakeGradio()
         with patch("data_analysis_agent.web.app.gr", fake_gradio), patch(
@@ -119,7 +119,7 @@ class WebAppTests(unittest.TestCase):
 
         self.assertIsInstance(demo, _FakeComponent)
         self.assertEqual(demo.component_type, "Blocks")
-        self.assertEqual(demo.kwargs.get("title"), "Academic-Data-Agent 交互工作台")
+        self.assertEqual(demo.kwargs.get("title"), "学术数据智能体交互工作台")
         self.assertIn("theme", demo.kwargs)
         self.assertIn("css", demo.kwargs)
         self.assertIn("min-height:700px", demo.kwargs["css"].replace(" ", ""))
@@ -130,16 +130,16 @@ class WebAppTests(unittest.TestCase):
             for component in _FakeComponent.instances
             if component.args and isinstance(component.args[0], str)
         ]
-        self.assertTrue(any("Academic Data Agent" in text for text in text_fragments))
+        self.assertTrue(any("学术数据智能体工作台" in text for text in text_fragments))
         self.assertTrue(any("运行总览" in text for text in text_fragments))
         self.assertTrue(any("历史与导航" in text for text in text_fragments))
 
-        column_components = [component for component in _FakeComponent.instances if component.component_type == "Column"]
-        group_components = [component for component in _FakeComponent.instances if component.component_type == "Group"]
-        self.assertGreaterEqual(len(column_components), 2)
-        self.assertGreaterEqual(len(group_components), 2)
+        tab_labels = [component.args[0] for component in _FakeComponent.instances if component.component_type == "Tab"]
+        for expected_tab in ["总览", "发起分析", "运行结果", "历史记录"]:
+            self.assertIn(expected_tab, tab_labels)
 
         labels = [component.kwargs.get("label") for component in _FakeComponent.instances]
+        self.assertIn("数据文件", labels)
         self.assertIn("报告质量档位", labels)
         self.assertIn("文档解析模式", labels)
         self.assertIn("视觉审稿", labels)
