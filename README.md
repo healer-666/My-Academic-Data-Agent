@@ -1,4 +1,3 @@
-
 <div align="center">
 <h1>Academic-Data-Agent</h1>
 
@@ -7,106 +6,107 @@
 [![Python Version](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](#)
 
-[特性](#-核心特性) • [架构](#-系统架构) • [快速开始](#-快速开始) • [使用指南](#-使用指南) • [项目结构](#-项目结构)
+[特点](#-核心特点) · [架构](#-系统架构) · [快速开始](#-快速开始) · [使用指南](#-使用指南) · [项目结构](#-项目结构)
 </div>
 
-## 📝 项目简介
+## 项目简介
 
-**Academic-Data-Agent** 是一个基于 HelloAgents 思路构建的科研数据分析 Agent 项目，目标是把“数据接入、分析执行、审稿治理、结果展示”串成一条可复现、可追踪、可演示的完整工作流。
+**Academic-Data-Agent** 是一个基于 `hello-agents` 二次开发的学术数据分析 Agent 项目，目标是把“输入接入、分析执行、证据归因、审稿治理、结果回放”串成一条可复现、可追踪、可展示的完整流程。
 
-它既支持传统的 `csv / xls / xlsx` 表格数据，也支持文本型 PDF 文献的前置解析：提取论文背景、识别候选表格、选择主表进入正式定量分析，并结合其他候选表摘要与文献上下文生成结构化报告。
+当前项目支持：
 
-当前版本已经在原有工作流基础上补上了更完整的工程能力：RAG 检索增强、证据归因、Project Memory、可回放 trace，以及更完整的 Web 工作台与历史记录回看。
+- 表格数据输入：`csv / xls / xlsx`
+- 文本型 PDF 的背景提取、候选表识别与主表选择
+- 工程化 RAG：`query rewrite + hybrid retrieval + structured chunking + rerank`
+- evidence register 与报告行内短引用
+- 文本 reviewer 与可选 visual reviewer
+- Project Memory：accepted run 的项目级经验记忆
+- Gradio 工作台、历史记录回放与工件下载
 
 ### 适用场景
 
-- 科研表格数据的自动清洗、统计分析与报告生成
-- 学术论文 PDF 中表格数据的抽取与结构化分析
-- 需要保留运行轨迹、图表工件、审稿记录的分析任务
-- 希望通过 Web 工作台快速查看历史运行结果与工件的场景
+- 学术表格数据的自动清洗、统计分析与报告生成
+- 论文 PDF 中表格数据的抽取与结构化分析
+- 需要保留 trace、图表、审稿记录与历史回放的分析任务
 
 ---
 
-## ✨ 核心特性
+## 核心特点
 
 ### 1. 两类输入统一接入
 
-- **表格输入**：直接分析 `csv / xls / xlsx`
-- **PDF 输入**：先做文档解析，再进入正式分析主链
+- 表格文件可直接进入结构化分析
+- PDF 会先做文档解析，再进入正式分析主链
 
 ### 2. PDF 多表综合分析
 
-- 自动抽取候选表格并选择主表
+- 自动识别候选表并选择主表
 - 主表负责正式定量分析
-- 其他候选表作为上下文证据参与报告解释
-- 自动注入论文摘要或前文背景，增强变量与任务语义理解
+- 其他候选表作为背景证据参与解释
 
-### 3. 自定义分析控制流
+### 3. 受控分析工作流
 
-- 使用结构化 JSON 协议驱动分析步骤
-- 避免纯文本 Agent 在工具调用和结果解析上的脆弱性
-- 支持本地 Python 分析、图表生成与中间工件落盘
+- 通过结构化协议驱动分析循环
+- 支持本地 Python 工具、图表生成与中间工件落盘
+- 有 reviewer 治理，不是单轮自由聊天
 
 ### 4. 工程化 RAG 与证据归因
 
-- 支持本地知识库与知识文档上传
-- 已实现 `query rewrite + hybrid retrieval + rule rerank`
-- 支持 `text_section + table_summary` 的结构化 chunk
-- PDF 场景下可结合主表/候选表做临时检索增强
-- 检索到的知识会生成 evidence register，并要求知识性解释带行内短引用
+- 本地知识库
+- hybrid retrieval
+- structured chunking
+- PDF 表格增强
+- evidence register
+- 行内短引用
 
-### 5. 学术治理、审稿与项目记忆
+### 5. Project Memory
 
-- 内置小样本与统计汇报约束
-- 支持 `draft / standard / publication` 三档质量模式
-- 支持文本 Reviewer
-- 支持可选视觉 Reviewer，对图表可读性进行额外检查
-- 支持 Project Memory：仅对已接受运行写回精炼经验，并在分析前/审稿前回忆
+- 只对 accepted run 写入长期 memory
+- 分析前与审稿前可回忆项目级偏好与约束
 
-### 6. 完整的工作台与历史记录
+### 6. 完整工作台与历史记录
 
-- Gradio Web UI 支持上传、预览、运行、回看
-- 自动保存 `cleaned_data.csv`、报告、图表、trace、review logs
+- Web 工作台支持上传、预览、运行、回看
+- 自动保存报告、图表、trace、review logs
 - 支持历史记录浏览与工件下载
 
 ---
 
-## 🏗️ 系统架构
+## 系统架构
 
 当前项目可以理解为五层结构：
 
 ### 1. 输入标准化层
 
-- 区分表格文件与 PDF
+- 区分表格输入与 PDF 输入
 - PDF 先进入 `document_ingestion`
-- 输出主表、候选表摘要和文献背景
+- 输出主表、候选表摘要和背景信息
 
 ### 2. 分析执行层
 
-- 由 `run_analysis(...)` 驱动主流程
-- 构建数据上下文、知识上下文与项目记忆上下文
-- 调用本地 Python 工具完成清洗、分析、绘图与报告生成
+- `run_analysis(...)` 驱动主流程
+- analyst loop 负责多步分析与工具调用
 
 ### 3. RAG 与证据层
 
-- 知识文档入库后可参与检索增强
-- 检索链路包含 query rewrite、hybrid retrieval、rerank、evidence register
-- 报告中的知识性解释要求与检索证据对应
+- 检索知识文档
+- 生成 evidence register
+- 约束报告中的知识性引用
 
 ### 4. 审稿治理层
 
-- 文本 Reviewer 检查报告逻辑、统计表述与工件一致性
-- 可选视觉 Reviewer 检查图表展示质量
-- Reviewer 会额外检查引用缺失、无效引用和证据错配
+- 文本 reviewer
+- 可选 visual reviewer
+- 证据一致性检查
 
 ### 5. 展示交互层
 
-- CLI 负责命令行运行与摘要展示
-- Gradio Web UI 负责文件上传、候选表预览、实时日志、结果回看与历史记录浏览
+- CLI 负责命令行运行
+- Gradio 工作台负责上传、预览、结果展示与历史回放
 
 ---
 
-## 🚀 快速开始
+## 快速开始
 
 ### 环境要求
 
@@ -167,7 +167,7 @@ python gradio_app.py
 
 ---
 
-## 📖 使用指南
+## 使用指南
 
 ### CLI 常用参数
 
@@ -182,7 +182,7 @@ python gradio_app.py
 
 ### 质量模式
 
-- `draft`：不审稿，直接输出初版
+- `draft`：不审稿，直接输出草稿
 - `standard`：默认允许 1 次返修
 - `publication`：默认允许 2 次返修，并可自动启用视觉审稿
 
@@ -221,134 +221,85 @@ print(result.memory_writeback_status)
 - 实时日志
 - 运行总览
 - 最终报告
-- 图表画廊
+- 图表展示
 - 审稿结果
 - 历史记录回看
 
-<!-- ### 学习文档索引
+### 文档索引
 
-- [核心代码学习手册](./docs/core-code-learning-manual.md)
-- [项目概念审计](./docs/project-concept-audit.md)
-- [项目改进路线图](./docs/project-improvement-roadmap.md)
-- [主链路拆解](./docs/project-mainline-analysis.md)
-- [Token / Context / Review 说明](./docs/token-context-review-explainer.md) -->
+- [核心代码学习手册](./docs/核心代码学习手册.md)
+- [项目概念审计](./docs/项目概念审计.md)
+- [项目改进路线图](./docs/项目改进路线图.md)
+- [项目主链路拆解](./docs/项目主链路拆解.md)
+- [令牌、上下文与审稿说明](./docs/令牌、上下文与审稿说明.md)
 
-<!-- --- -->
-
-<!-- ## 🖼️ 界面展示
-
-![主界面](/C:/Users/pc/OneDrive/Desktop/agent/images/image1.png)
 ---
-![历史记录](/C:/Users/pc/OneDrive/Desktop/agent/images/image2.png)
----
-![运行日志记录](/C:/Users/pc/OneDrive/Desktop/agent/images/image3.png) -->
-<!-- 
---- -->
 
-## 📂 项目结构
+## 项目结构
 
 ```text
 .
-├─ data/                          示例数据
-├─ docs/                          技术说明与学习文档
-├─ memory/                        本地知识库与项目记忆
-├─ outputs/                       运行产物与 Web 上传缓存
-├─ src/
-│  └─ data_analysis_agent/
-│     ├─ agent_runner.py          主分析流程与审稿控制
-│     ├─ config.py                运行配置
-│     ├─ data_context.py          数据上下文构建
-│     ├─ document_ingestion.py    PDF 文档解析与主表选择
-│     ├─ knowledge_context.py     memory / RAG / evidence 注入层
-│     ├─ prompts.py               Analyst / Reviewer Prompt
-│     ├─ reporting.py             报告提取、引用解析与落盘
-│     ├─ review_service.py        审稿任务构建与日志落地
-│     ├─ rag/                     RAG 子系统
-│     ├─ memory/                  Project Memory 子系统
-│     ├─ vision_review.py         视觉审稿
-│     └─ web/                     Gradio 工作台
-├─ tests/                         单元测试
-├─ gradio_app.py                  Web 启动入口
-├─ main.py                        CLI 入口
-├─ requirements.txt
-└─ README.md
+├── data/                          示例数据
+├── docs/                          技术说明与学习文档
+├── memory/                        本地知识库与项目记忆
+├── outputs/                       运行产物与 Web 上传缓存
+├── src/
+│   └── data_analysis_agent/
+│       ├── agent_runner.py        主分析流程与审稿控制
+│       ├── config.py              运行配置
+│       ├── data_context.py        数据上下文构建
+│       ├── document_ingestion.py  PDF 文档解析与主表选择
+│       ├── knowledge_context.py   Memory / RAG / Evidence 注入层
+│       ├── prompts.py             Analyst / Reviewer Prompt
+│       ├── reporting.py           报告提取、引用解析与落盘
+│       ├── review_service.py      审稿任务构建与日志落地
+│       ├── rag/                   RAG 子系统
+│       ├── memory/                Project Memory 子系统
+│       ├── vision_review.py       视觉审稿
+│       └── web/                   Gradio 工作台
+├── tests/                         单元测试
+├── gradio_app.py                  Web 启动入口
+├── main.py                        CLI 入口
+├── requirements.txt
+└── README.md
 ```
 
 ---
 
-## 📦 运行产物
+## 运行产物
 
 每次运行都会在 `outputs/run_YYYYMMDD_HHMMSS/` 下生成独立工件，常见内容包括：
 
 ```text
 outputs/run_YYYYMMDD_HHMMSS/
-├─ data/
-│  ├─ cleaned_data.csv
-│  ├─ parsed_document.json
-│  └─ extracted_tables/
-├─ figures/
-│  └─ review_round_1/
-├─ logs/
-│  ├─ agent_trace.json
-│  ├─ document_ingestion.json
-│  ├─ review_round_1_review.json
-│  └─ review_round_1_visual_review.json
-├─ review_round_1_report.md
-└─ final_report.md
+├── data/
+│   ├── cleaned_data.csv
+│   ├── parsed_document.json
+│   └── extracted_tables/
+├── figures/
+├── logs/
+│   ├── agent_trace.json
+│   ├── document_ingestion.json
+│   ├── review_round_1_review.json
+│   └── review_round_1_visual_review.json
+├── review_round_1_report.md
+└── final_report.md
 ```
 
-`agent_trace.json` 中当前会记录 workflow 状态、event stream、RAG payload、evidence coverage、memory retrieval / writeback 和 review history。
+`agent_trace.json` 当前会记录：
+
+- workflow 状态
+- event stream
+- RAG payload
+- evidence coverage
+- memory retrieval / writeback
+- review history
 
 ---
 
-## 📌 当前边界
+## 当前边界
 
-- PDF 当前优先支持文本型文献，不处理扫描件 OCR
+- PDF 当前优先支持文本型文献，不处理复杂 OCR
 - PDF 多表综合目前仍然是“一张主表做正式定量分析”
-- 视觉审稿是辅助审查，不是重新执行整套分析
+- visual reviewer 是辅助审查，不是重新执行整套分析
 - 在线检索、embedding 与视觉模型依赖外部 API 配置
-- Memory 当前是项目级精炼经验回忆，不是完整长期会话记忆网络
-
----
-
-## 🧪 测试状态
-
-当前项目已经覆盖：
-
-- 文档解析
-- 数据上下文
-- 主分析流程
-- RAG services
-- memory services
-- reviewer / evidence attribution
-- Web 工作台
-- 历史记录
-
-当前本地全量测试通过数为 **104**。
-
-```bash
-python -m unittest discover -s tests -q
-```
-
----
-
-## 🤝 使用建议
-
-- 表格任务优先直接上传 `csv/xls/xlsx`，路径最稳定、耗时也最短
-- PDF 任务建议先在 Web 前端预览候选表，再决定主表
-- 如果更想提高报告可信度，建议同时上传相关知识文档并启用 `use_rag`
-- 如果是持续推进同一项目，建议开启 `use_memory` 并设置稳定的 `memory_scope_label`
-- 更重视速度时优先使用 `latency_mode=auto` 或 `fast`
-- 更重视报告质量与审稿约束时优先使用 `publication`
-
-Academic-Data-Agent 更适合作为一个持续演进的科研数据分析 Agent 平台，而不是一次性脚本。它不仅追求“跑出结果”，也重视中间过程、图表、审稿意见与运行痕迹的完整保留。
-
-👥 致谢
-
-### 特别鸣谢
-
-* **Datawhale 社区**：提供学习资源与支持
-* **Hello-Agents 项目**：提供框架基础
-* **OpenAI & DeepSeek & Qwen**：LLM 技术支持
-
-* * *
