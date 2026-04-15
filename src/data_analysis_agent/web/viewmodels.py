@@ -107,11 +107,11 @@ def format_event_line(event_type: str, payload: dict[str, object]) -> str:
     if event_type == "run_directory_created":
         return f"已创建运行目录：{payload.get('run_dir', '')}"
     if event_type == "document_ingestion_started":
-        return f"开始文档解析：input_kind={payload.get('input_kind', 'unknown')}"
+        return f"开始准备输入数据：input_kind={payload.get('input_kind', 'unknown')}"
     if event_type == "document_ingestion_completed":
-        return f"文档解析完成 | status={payload.get('status', 'unknown')} | {payload.get('summary', '')}"
+        return f"输入准备完成 | status={payload.get('status', 'unknown')} | {payload.get('summary', '')}"
     if event_type == "document_ingestion_skipped":
-        return "文档解析已跳过：当前输入已是结构化表格。"
+        return "输入准备已跳过：当前输入已是结构化表格。"
     if event_type == "data_context_ready":
         shape = payload.get("shape", ("?", "?"))
         return f"数据上下文已准备：{shape[0]} 行 x {shape[1]} 列"
@@ -215,26 +215,11 @@ def build_status_markdown(status_text: str, level: str = "info") -> str:
 
 
 def _build_ingestion_focus_block(result: AnalysisRunResult) -> str:
-    if result.input_kind != "pdf":
-        return (
-            "<div class='review-highlight'>"
-            "<div class='review-status-pill'>文档解析总览</div>"
-            "<div class='review-highlight-body'>当前输入已是结构化表格，无需额外文档解析。</div>"
-            "</div>"
-        )
-    table_shape = f"{result.selected_table_shape[0]} x {result.selected_table_shape[1]}" if result.selected_table_shape else "unknown"
-    multi_table = "已启用" if result.pdf_multi_table_mode else "未启用"
     return (
         "<div class='review-highlight'>"
-        "<div class='review-status-pill'>文档解析总览</div>"
+        "<div class='review-status-pill'>输入主线</div>"
         f"<div class='review-highlight-body'>输入类型：{_escape(input_kind_label(result.input_kind))}<br>"
-        f"状态：{_escape(ingestion_status_label(result.document_ingestion_status))}<br>"
-        f"候选表数量：{_escape(result.candidate_table_count)}<br>"
-        f"主表 ID：{_escape(result.selected_table_id or 'unknown')}<br>"
-        f"主表形状：{_escape(table_shape)}<br>"
-        f"PDF 多表综合：{_escape(multi_table)}<br>"
-        f"耗时：{_escape(format_duration(result.document_ingestion_duration_ms))}<br>"
-        f"{_escape(result.document_ingestion_summary or '暂无文档解析摘要。')}</div>"
+        "当前版本聚焦结构化表格数据分析，输入已直接进入分析主链路。</div>"
         "</div>"
     )
 
@@ -250,7 +235,6 @@ def _build_rag_focus_block(result: AnalysisRunResult) -> str:
         f"<div class='review-highlight-body'>状态：{_escape(rag_status_label(result.rag_status))}<br>"
         f"命中数：{_escape(result.rag_match_count)}<br>"
         f"策略：{_escape(result.rag_retrieval_strategy)}<br>"
-        f"PDF 表格候选：{_escape(result.rag_table_candidate_count)}<br>"
         f"Chunk 类型：{_escape(', '.join(result.rag_final_chunk_kinds) if result.rag_final_chunk_kinds else 'none')}<br>"
         f"来源：{_escape(rag_sources)}<br>"
         f"引用数：{_escape(result.rag_citation_count)}<br>"
@@ -325,8 +309,6 @@ def build_summary_markdown(result: AnalysisRunResult) -> str:
     cited_sources = ", ".join(result.rag_cited_sources) if result.rag_cited_sources else "无"
     uncited_sections = ", ".join(result.rag_uncited_sections_detected) if result.rag_uncited_sections_detected else "无"
     warnings = "\n".join(f"- {item}" for item in result.workflow_warnings) if result.workflow_warnings else "- 无"
-    ingestion_log = result.document_ingestion_log_path.as_posix() if result.document_ingestion_log_path else "无"
-    pdf_mode = "启用" if result.pdf_multi_table_mode else "未启用"
     memory_scope = result.memory_scope_key or "N/A"
     return (
         "## 运行摘要\n\n"
@@ -336,21 +318,12 @@ def build_summary_markdown(result: AnalysisRunResult) -> str:
         f"- 工具：`{tools}`\n"
         f"- 报告质量：`{quality_mode_label(result.quality_mode)} ({result.quality_mode})`\n"
         f"- 延迟模式：`{latency_mode_label(result.latency_mode)} ({result.latency_mode})`\n"
-        f"- 文档解析状态：`{ingestion_status_label(result.document_ingestion_status)}`\n"
-        f"- 文档解析摘要：`{result.document_ingestion_summary or '无'}`\n"
-        f"- 文档解析日志：`{ingestion_log}`\n"
-        f"- PDF 多表模式：`{pdf_mode}`\n"
-        f"- 候选表数量：`{result.candidate_table_count}`\n"
-        f"- 主表 ID：`{result.selected_table_id or 'N/A'}`\n"
-        f"- 主表形状：`{result.selected_table_shape or 'N/A'}`\n"
         f"- RAG：`{rag_status_label(result.rag_status)} ({result.rag_status})`\n"
         f"- RAG 命中数：`{result.rag_match_count}`\n"
         f"- Dense 命中数：`{result.rag_dense_match_count}`\n"
         f"- Keyword 命中数：`{result.rag_keyword_match_count}`\n"
         f"- 检索策略：`{result.rag_retrieval_strategy}`\n"
-        f"- PDF 表格候选：`{result.rag_table_candidate_count}`\n"
         f"- 最终 Chunk 类型：`{', '.join(result.rag_final_chunk_kinds) if result.rag_final_chunk_kinds else 'none'}`\n"
-        f"- 命中主表证据：`{result.rag_selected_table_hit}`\n"
         f"- RAG 来源：`{rag_sources}`\n"
         f"- 引用数量：`{result.rag_citation_count}`\n"
         f"- 已引用来源：`{cited_sources}`\n"
@@ -370,7 +343,6 @@ def build_summary_markdown(result: AnalysisRunResult) -> str:
         f"- Trace：`{result.trace_path.as_posix()}`\n\n"
         "### 耗时拆解\n"
         f"- 总耗时：`{format_duration(result.total_duration_ms)}`\n"
-        f"- 文档解析：`{format_duration(result.document_ingestion_duration_ms)}`\n"
         f"- LLM：`{format_duration(result.llm_duration_ms)}`\n"
         f"- 工具调用：`{format_duration(result.tool_duration_ms)}`\n"
         f"- 文本审稿：`{format_duration(result.review_duration_ms)}`\n"
@@ -445,25 +417,20 @@ def build_trace_html(result: AnalysisRunResult) -> str:
             "</tr>"
         )
     body = "".join(rows) or "<tr><td colspan='6'><div class='empty-panel'>暂无可展示的执行轨迹。</div></td></tr>"
-    pdf_mode = "启用" if result.pdf_multi_table_mode else "未启用"
     rag_sources = ", ".join(result.rag_sources_used) if result.rag_sources_used else "无"
     cited_sources = ", ".join(result.rag_cited_sources) if result.rag_cited_sources else "无"
     uncited_sections = ", ".join(result.rag_uncited_sections_detected) if result.rag_uncited_sections_detected else "无"
     memory_scope = result.memory_scope_key or "N/A"
     document_block = (
         "<div class='empty-panel'>"
-        f"文档解析：{_escape(ingestion_status_label(result.document_ingestion_status))} | "
-        f"耗时：{_escape(format_duration(result.document_ingestion_duration_ms))}<br>"
-        f"候选表数量：{_escape(result.candidate_table_count)} | "
-        f"主表 ID：{_escape(result.selected_table_id or 'N/A')} | "
-        f"PDF 多表综合：{_escape(pdf_mode)}<br>"
-        f"{_escape(result.document_ingestion_summary or '暂无文档解析摘要。')}"
+        f"输入类型：{_escape(input_kind_label(result.input_kind))} | "
+        "当前版本聚焦结构化表格数据主线。"
         "</div>"
     )
     rag_block = (
         "<div class='empty-panel'>"
         f"RAG：{_escape(rag_status_label(result.rag_status))} | 命中数：{_escape(result.rag_match_count)} | 策略：{_escape(result.rag_retrieval_strategy)}<br>"
-        f"Dense：{_escape(result.rag_dense_match_count)} | Keyword：{_escape(result.rag_keyword_match_count)} | 主表命中：{_escape(result.rag_selected_table_hit)}<br>"
+        f"Dense：{_escape(result.rag_dense_match_count)} | Keyword：{_escape(result.rag_keyword_match_count)}<br>"
         f"Chunk 类型：{_escape(', '.join(result.rag_final_chunk_kinds) if result.rag_final_chunk_kinds else 'none')}<br>"
         f"来源：{_escape(rag_sources)}<br>"
         f"引用数：{_escape(result.rag_citation_count)} | 覆盖状态：{_escape(result.rag_evidence_coverage_status)}<br>"

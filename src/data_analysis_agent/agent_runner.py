@@ -24,7 +24,7 @@ from .artifact_service import (
 from .compat import ToolRegistry
 from .config import RuntimeConfig, load_runtime_config
 from .data_context import DataContextSummary, build_data_context
-from .document_ingestion import IngestionResult, ingest_input_document
+from .document_ingestion import IngestionResult
 from .events import EventHandler, EventRecorder, emit_event
 from .knowledge_context import KnowledgeContextProvider
 from .llm import build_llm
@@ -303,6 +303,32 @@ def _build_default_memory_payload(*, use_memory: bool, memory_scope_key: str, me
         "written_record_ids": [],
         "warnings": [],
     }
+
+
+def _build_tabular_ingestion_result(*, source_path: Path, logs_dir: Path) -> IngestionResult:
+    log_path = logs_dir / "document_ingestion.json"
+    payload = {
+        "input_kind": "tabular",
+        "status": "not_needed",
+        "summary": "输入文件已经是结构化表格，已直接进入分析主链路。",
+        "normalized_data_path": source_path.as_posix(),
+        "duration_ms": 0,
+        "candidate_table_count": 0,
+        "pdf_multi_table_mode": False,
+        "mode": "tabular_only",
+    }
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return IngestionResult(
+        input_kind="tabular",
+        status="not_needed",
+        summary="输入文件已经是结构化表格，已直接进入分析主链路。",
+        normalized_data_path=source_path,
+        duration_ms=0,
+        log_path=log_path,
+        candidate_table_count=0,
+        pdf_multi_table_mode=False,
+    )
 
 
 def _build_observation_summary(
@@ -1037,10 +1063,6 @@ def run_analysis(
     max_reviews: Optional[int] = None,
     quality_mode: str = "standard",
     latency_mode: str = "auto",
-    document_ingestion_mode: str = "auto",
-    max_pdf_pages: int = 20,
-    max_candidate_tables: int = 5,
-    selected_table_id: str | None = None,
     vision_review_mode: str = "auto",
     vision_max_images: int = 3,
     vision_max_image_side: int = 1024,
@@ -1102,8 +1124,7 @@ def run_analysis(
         quality_mode=resolved_quality_mode,
         latency_mode=resolved_latency_mode,
         vision_review_mode=resolved_vision_review_mode,
-        document_ingestion_mode=document_ingestion_mode,
-        selected_table_id=selected_table_id,
+        document_ingestion_mode="tabular_only",
         run_dir_parts=_create_run_directory(output_dir),
     )
     run_dir = run_context.run_dir
@@ -1122,7 +1143,13 @@ def run_analysis(
         logs_dir=logs_dir.as_posix(),
     )
 
-    input_kind = "pdf" if source_path.suffix.lower() == ".pdf" else "tabular"
+    supported_suffixes = {".csv", ".xls", ".xlsx"}
+    if source_path.suffix.lower() not in supported_suffixes:
+        raise ValueError(
+            f"Unsupported input file format: {source_path.suffix}. "
+            "当前版本仅支持 CSV / XLS / XLSX 结构化表格数据。"
+        )
+    input_kind = "tabular"
     workflow_tracker.transition(WorkflowState.INGEST)
     _emit_event(
         event_recorder.emit,
@@ -1131,47 +1158,16 @@ def run_analysis(
         data_path=source_path.as_posix(),
     )
     ingestion_started_at = time.perf_counter()
-    document_ingestion = ingest_input_document(
-        source_path,
-        run_dir=run_dir,
-        data_dir=data_dir,
+    document_ingestion = _build_tabular_ingestion_result(
+        source_path=source_path,
         logs_dir=logs_dir,
-        mode=document_ingestion_mode,
-        max_pdf_pages=max_pdf_pages,
-        max_candidate_tables=max_candidate_tables,
-        selected_table_id=selected_table_id,
     )
-    # Python 3.8's unittest.mock exposes call_args.kwargs awkwardly; normalize it when mocked.
-    if hasattr(ingest_input_document, "call_args"):
-        try:
-            ingest_input_document.call_args.kwargs = {
-                "run_dir": run_dir,
-                "data_dir": data_dir,
-                "logs_dir": logs_dir,
-                "mode": document_ingestion_mode,
-                "max_pdf_pages": max_pdf_pages,
-                "max_candidate_tables": max_candidate_tables,
-                "selected_table_id": selected_table_id,
-            }
-        except Exception:
-            pass
     _accumulate_duration(
         timing_breakdown,
         "document_ingestion_duration_ms",
         max(document_ingestion.duration_ms, _elapsed_ms(ingestion_started_at)),
     )
-    if document_ingestion.status == "not_needed":
-        _emit_event(event_recorder.emit, "document_ingestion_skipped")
-    else:
-        _emit_event(
-            event_recorder.emit,
-            "document_ingestion_completed",
-            status=document_ingestion.status,
-            summary=document_ingestion.summary,
-            input_kind=document_ingestion.input_kind,
-        )
-    if document_ingestion.status == "failed":
-        raise ValueError(document_ingestion.summary)
+    _emit_event(event_recorder.emit, "document_ingestion_skipped")
 
     workflow_tracker.transition(WorkflowState.CONTEXT)
     _emit_event(event_recorder.emit, "data_context_loading", data_path=document_ingestion.normalized_data_path.as_posix())
@@ -1179,7 +1175,6 @@ def run_analysis(
     data_context = build_data_context(
         document_ingestion.normalized_data_path,
         input_kind=document_ingestion.input_kind,
-        parsed_document_path=document_ingestion.parsed_document_path,
     )
     _accumulate_duration(timing_breakdown, "data_context_duration_ms", _elapsed_ms(data_context_started_at))
     small_simple_dataset = _is_small_simple_dataset(data_context)
@@ -1391,18 +1386,6 @@ def run_analysis(
                     reason="No new knowledge files were uploaded.",
                 )
 
-            ephemeral_table_candidates = rag_service.build_ephemeral_table_candidates(data_context=data_context)
-            rag_table_candidate_count = len(ephemeral_table_candidates)
-            rag_payload["table_candidate_count"] = rag_table_candidate_count
-            rag_payload["ephemeral_table_candidates"] = [chunk.to_trace_dict() for chunk in ephemeral_table_candidates]
-            if ephemeral_table_candidates:
-                _emit_event(
-                    event_recorder.emit,
-                    "knowledge_table_candidates_prepared",
-                    table_candidate_count=rag_table_candidate_count,
-                    selected_table_id=data_context.selected_table_id,
-                )
-
             query_bundle = rag_service.build_queries(
                 data_context=data_context,
                 user_query=query,
@@ -1429,13 +1412,7 @@ def run_analysis(
                     dense_query=query_bundle.dense_query,
                     keyword_query=query_bundle.keyword_query,
                     query_terms=query_bundle.normalized_terms,
-                    column_terms=tuple(
-                        dict.fromkeys(
-                            [*data_context.columns[:8], *data_context.selected_table_headers, *data_context.selected_table_numeric_columns]
-                        )
-                    ),
-                    selected_table_id=data_context.selected_table_id,
-                    ephemeral_candidates=ephemeral_table_candidates,
+                    column_terms=tuple(dict.fromkeys(data_context.columns[:8])),
                     top_k=4,
                 )
                 _accumulate_duration(
@@ -1446,15 +1423,10 @@ def run_analysis(
                 rag_payload["warnings"].extend(retrieval_result.warnings)
                 rag_payload["dense_candidates"] = [chunk.to_trace_dict() for chunk in retrieval_result.dense_candidates]
                 rag_payload["keyword_candidates"] = [chunk.to_trace_dict() for chunk in retrieval_result.keyword_candidates]
-                rag_payload["table_candidate_count"] = retrieval_result.table_candidate_count
-                rag_payload["ephemeral_table_candidates"] = [
-                    chunk.to_trace_dict() for chunk in retrieval_result.ephemeral_table_candidates
-                ]
                 rag_payload["merged_candidates_count"] = len(
                     {
                         *[chunk.chunk_id for chunk in retrieval_result.dense_candidates],
                         *[chunk.chunk_id for chunk in retrieval_result.keyword_candidates],
-                        *[chunk.chunk_id for chunk in retrieval_result.ephemeral_table_candidates],
                     }
                 )
                 rag_payload["reranked_chunks"] = [chunk.to_trace_dict() for chunk in retrieval_result.reranked_chunks]
@@ -1465,14 +1437,8 @@ def run_analysis(
                 rag_dense_match_count = retrieval_result.dense_match_count
                 rag_keyword_match_count = retrieval_result.keyword_match_count
                 rag_retrieval_strategy = retrieval_result.retrieval_strategy
-                rag_table_candidate_count = retrieval_result.table_candidate_count
                 rag_final_chunk_kinds = tuple(
                     dict.fromkeys(str(chunk.chunk_kind or "") or "text_section" for chunk in retrieval_result.reranked_chunks)
-                )
-                normalized_selected_table_id = str(data_context.selected_table_id or "").strip()
-                rag_selected_table_hit = bool(normalized_selected_table_id) and any(
-                    str(chunk.table_id or "").strip() == normalized_selected_table_id
-                    for chunk in retrieval_result.reranked_chunks
                 )
                 rag_payload["final_chunk_kinds"] = list(rag_final_chunk_kinds)
                 _emit_event(
@@ -1600,13 +1566,11 @@ def run_analysis(
             cleaned_data_path=cleaned_data_path.as_posix(),
             figures_dir=review_figures_dir.as_posix(),
             logs_dir=logs_dir.as_posix(),
-            background_literature_context=data_context.background_literature_context,
             max_steps=effective_max_steps,
             tool_descriptions=tool_registry.get_tools_description(),
             search_enabled=search_enabled,
             latency_mode=resolved_latency_mode,
             fast_path_enabled=fast_path_enabled,
-            pdf_small_table_mode=data_context.pdf_small_table_mode,
         )
         current_runner = ScientificReActRunner(
             name=agent_name,

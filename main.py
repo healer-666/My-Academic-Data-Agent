@@ -91,29 +91,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Latency policy: auto enables adaptive fast-paths, quality preserves the full workflow, fast prioritizes speed.",
     )
     parser.add_argument(
-        "--document-ingestion-mode",
-        choices=("auto", "text_only", "vision_fallback"),
-        default="auto",
-        help="PDF ingestion policy: auto and text_only only use local text/table parsing in V1; vision_fallback is reserved for future work.",
-    )
-    parser.add_argument(
-        "--max-pdf-pages",
-        type=int,
-        default=20,
-        help="Maximum number of PDF pages inspected during document ingestion.",
-    )
-    parser.add_argument(
-        "--max-candidate-tables",
-        type=int,
-        default=5,
-        help="Maximum number of candidate PDF tables recorded during ingestion.",
-    )
-    parser.add_argument(
-        "--selected-table-id",
-        default=None,
-        help="Optional PDF candidate table_id override, such as table_01.",
-    )
-    parser.add_argument(
         "--vision-review-mode",
         choices=("off", "auto", "on"),
         default="auto",
@@ -200,10 +177,6 @@ def _build_summary_table(result: AnalysisRunResult) -> Table:
     table.add_row("Quality mode", result.quality_mode)
     table.add_row("Latency mode", result.latency_mode)
     table.add_row("Input kind", result.input_kind)
-    table.add_row("Document parse", result.document_ingestion_status)
-    table.add_row("Candidate tables", str(result.candidate_table_count))
-    table.add_row("Selected table", result.selected_table_id or "auto")
-    table.add_row("PDF multi-table", "enabled" if result.pdf_multi_table_mode else "disabled")
     table.add_row("Vision review", _format_vision_status(result))
     table.add_row("Run directory", result.run_dir.as_posix())
     table.add_row("Cleaned data", result.cleaned_data_path.as_posix())
@@ -215,7 +188,6 @@ def _build_summary_table(result: AnalysisRunResult) -> Table:
     table.add_row("LLM time", _format_duration(result.llm_duration_ms))
     table.add_row("Tool time", _format_duration(result.tool_duration_ms))
     table.add_row("Review time", _format_duration(result.review_duration_ms))
-    table.add_row("Document time", _format_duration(result.document_ingestion_duration_ms))
     table.add_row("Vision time", _format_duration(result.vision_review_duration_ms))
     table.add_row("Tavily time", _format_duration(result.timing_breakdown.get("tavily_duration_ms", 0)))
     table.add_row("Workflow", _format_workflow_status(result))
@@ -279,15 +251,15 @@ def _build_event_handler(console: Console, status: Status) -> Callable[[str, dic
             status.update("[cyan]Creating a production run workspace...[/cyan]", spinner="dots")
             console.log(f"[cyan]Run directory ready:[/cyan] {payload.get('run_dir', '')}")
         elif event_type == "document_ingestion_started":
-            status.update("[cyan]Preparing the input document for analysis...[/cyan]", spinner="dots")
+            status.update("[cyan]Preparing the tabular dataset for analysis...[/cyan]", spinner="dots")
             console.log(f"[cyan]Input kind:[/cyan] {payload.get('input_kind', 'unknown')}")
         elif event_type == "document_ingestion_completed":
             console.log(
-                f"[cyan]Document ingestion completed[/cyan] | status={payload.get('status', 'unknown')} | "
+                f"[cyan]Input preparation completed[/cyan] | status={payload.get('status', 'unknown')} | "
                 f"{payload.get('summary', '')}"
             )
         elif event_type == "document_ingestion_skipped":
-            console.log("[cyan]Document ingestion skipped:[/cyan] input is already tabular.")
+            console.log("[cyan]Input preparation skipped:[/cyan] input is already tabular.")
         elif event_type == "data_context_loading":
             status.update("[cyan]Reading dataset metadata and building compact data_context...[/cyan]", spinner="dots")
         elif event_type == "data_context_ready":
@@ -407,11 +379,7 @@ def main() -> int:
                 max_reviews=args.max_reviews,
                 quality_mode=args.quality_mode,
                 latency_mode=args.latency_mode,
-                document_ingestion_mode=args.document_ingestion_mode,
-                max_pdf_pages=args.max_pdf_pages,
-            max_candidate_tables=args.max_candidate_tables,
-            selected_table_id=args.selected_table_id,
-            vision_review_mode=args.vision_review_mode,
+                vision_review_mode=args.vision_review_mode,
                 vision_max_images=args.vision_max_images,
                 vision_max_image_side=args.vision_max_image_side,
                 event_handler=event_handler,

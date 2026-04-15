@@ -4,6 +4,7 @@ import sys
 import unittest
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 
@@ -14,12 +15,12 @@ if str(SRC_PATH) not in sys.path:
 
 from data_analysis_agent.agent_runner import AgentStepTrace, AnalysisRunResult
 from data_analysis_agent.data_context import DataContextSummary
-from data_analysis_agent.document_ingestion import ExtractedTableRecord, PdfPreviewResult
 from data_analysis_agent.reporting import ReportTelemetry
 from data_analysis_agent.web.service import (
+    answer_history_question_ui,
     copy_uploaded_file,
     create_run_bundle,
-    preview_pdf_candidates,
+    load_history_qa_runs,
     stream_analysis_session,
 )
 from data_analysis_agent.web.viewmodels import default_max_reviews_for_quality, format_event_line
@@ -115,15 +116,26 @@ class WebServiceTests(unittest.TestCase):
             review_rounds_used=1,
             review_critique="Accepted.",
             review_log_paths=(review_log_path,),
-            input_kind="pdf",
-            document_ingestion_status="completed",
-            document_ingestion_summary="PDF 主表已选定。",
-            document_ingestion_duration_ms=1200,
+            input_kind="tabular",
+            document_ingestion_status="not_needed",
+            document_ingestion_summary="输入已是结构化表格，直接进入分析。",
+            document_ingestion_duration_ms=0,
             document_ingestion_log_path=ingestion_log_path,
-            candidate_table_count=2,
-            selected_table_id="table_01",
-            selected_table_shape=(7, 5),
-            pdf_multi_table_mode=True,
+            latency_mode="auto",
+            vision_review_mode="auto",
+            rag_enabled=True,
+            rag_status="retrieved",
+            rag_match_count=2,
+            rag_sources_used=("glossary.md",),
+            rag_dense_match_count=1,
+            rag_keyword_match_count=1,
+            rag_retrieval_strategy="hybrid",
+            rag_final_chunk_kinds=("text_section",),
+            memory_enabled=True,
+            memory_scope_key="project-alpha",
+            memory_match_count=1,
+            memory_writeback_status="written",
+            memory_written_count=2,
         )
 
     def test_default_max_reviews_for_quality(self):
@@ -153,66 +165,62 @@ class WebServiceTests(unittest.TestCase):
         self.assertTrue(bundle.exists())
         self.assertEqual(bundle.suffix, ".zip")
 
-    def test_format_event_line_for_review_reject(self):
-        line = format_event_line("review_rejected", {"critique": "Please revise the report."})
-        self.assertIn("Reviewer 拒绝", line)
-        self.assertIn("Please revise", line)
+    def test_format_event_line_for_tabular_ingestion_skip(self):
+        line = format_event_line("document_ingestion_skipped", {})
+        self.assertIn("结构化表格", line)
 
-    def test_preview_pdf_candidates_returns_selector_choices(self):
-        case_dir = self._workspace_case_dir()
-        pdf_path = case_dir / "paper.pdf"
-        pdf_path.write_text("fake-pdf", encoding="utf-8")
-
-        preview_result = PdfPreviewResult(
-            source_pdf=pdf_path,
-            background_literature_context="PDF 摘要片段",
-            candidate_tables=(
-                ExtractedTableRecord(
-                    table_id="table_01",
-                    page_number=4,
-                    rows=7,
-                    cols=5,
-                    headers=("model", "precision", "recall"),
-                    numeric_columns=("precision", "recall"),
-                    csv_path=pdf_path,
-                    area=35,
-                    content_hint="A | 0.81 | 0.74",
-                ),
+    def test_load_history_qa_runs_uses_completed_records(self):
+        records = (
+            SimpleNamespace(
+                run_id="run_demo",
+                detected_domain="finance",
+                review_status="accepted",
+                timestamp="2026-04-14T10:00:00",
             ),
-            default_table_id="table_01",
-            warnings=(),
         )
+        with patch("data_analysis_agent.web.service.index_completed_runs", return_value=records):
+            choices, defaults = load_history_qa_runs("outputs")
 
-        with patch("data_analysis_agent.web.service.preview_pdf_tables", return_value=preview_result):
-            status, choices, selected, summary_html = preview_pdf_candidates(
-                pdf_path.as_posix(),
-                (case_dir / "outputs").as_posix(),
-                "demo",
-                20,
-                5,
+        self.assertEqual(choices[0][1], "run_demo")
+        self.assertEqual(defaults, ["run_demo"])
+
+    def test_answer_history_question_ui_formats_sources_and_warnings(self):
+        qa_result = SimpleNamespace(
+            answer_markdown="## 历史问答结果\n\n这里是回答。",
+            sources=("run_demo | report | review_status=accepted | 报告摘要",),
+            warnings=("fallback used",),
+        )
+        with patch("data_analysis_agent.web.service.answer_history_question", return_value=qa_result):
+            answer, sources_html = answer_history_question_ui(
+                "上次用了什么方法？",
+                ["run_demo"],
+                "single",
+                "outputs",
+                "",
             )
 
-        self.assertIn("默认主表", status)
-        self.assertEqual(selected, "table_01")
-        self.assertEqual(choices[0][1], "table_01")
-        self.assertIn("候选表摘要", summary_html)
-        self.assertIn("综合报告", summary_html)
+        self.assertIn("这里是回答", answer)
+        self.assertIn("run_demo", sources_html)
+        self.assertIn("fallback used", sources_html)
 
     def test_stream_analysis_session_emits_final_outputs(self):
         case_dir = self._workspace_case_dir()
         upload = case_dir / "sample.csv"
         upload.write_text("a,b\n1,2\n", encoding="utf-8")
+        knowledge = case_dir / "glossary.md"
+        knowledge.write_text("Domain glossary.", encoding="utf-8")
         result = self._build_result(case_dir / "outputs" / "run_demo")
 
         def fake_run_analysis(*args, **kwargs):
             event_handler = kwargs["event_handler"]
             event_handler("config_loading", {})
-            event_handler("document_ingestion_completed", {"status": "completed", "summary": "PDF 主表已选定。"})
+            event_handler("document_ingestion_skipped", {})
             event_handler("analysis_started", {"analysis_round": 1, "max_steps": 6})
             event_handler("review_accepted", {"review_round": 1, "critique": "Accepted."})
-            self.assertEqual(kwargs["selected_table_id"], "table_02")
+            self.assertTrue(kwargs["use_rag"])
             self.assertTrue(kwargs["use_memory"])
             self.assertEqual(kwargs["memory_scope_key"], "project-alpha")
+            self.assertEqual(len(kwargs["knowledge_paths"]), 1)
             return result
 
         with patch("data_analysis_agent.web.service.run_analysis", side_effect=fake_run_analysis):
@@ -223,19 +231,15 @@ class WebServiceTests(unittest.TestCase):
                     "standard",
                     "auto",
                     "auto",
-                    "auto",
                     6,
                     1,
-                    20,
-                    5,
                     3,
                     1024,
-                    "table_02",
                     (case_dir / "outputs").as_posix(),
                     "Advanced Data Analyst",
                     "",
                     "demo-session",
-                    None,
+                    [knowledge.as_posix()],
                     True,
                     True,
                     "project-alpha",
@@ -244,61 +248,14 @@ class WebServiceTests(unittest.TestCase):
 
         final_output = outputs[-1]
         self.assertIn("运行完成", final_output[0])
-        self.assertIn("Memory", final_output[0])
         self.assertIn("demo-domain", final_output[2])
-        self.assertIn("候选表数量", final_output[3])
-        self.assertIn("PDF 多表模式", final_output[3])
+        self.assertIn("结构化表格", final_output[3])
+        self.assertNotIn("PDF", final_output[3])
         self.assertIn("# Report", final_output[4])
         self.assertEqual(len(final_output[5]), 1)
-        self.assertIn("审稿工作台", final_output[6])
         self.assertTrue(str(final_output[8]).endswith("final_report.md"))
         self.assertTrue(str(final_output[9]).endswith("agent_trace.json"))
         self.assertTrue(str(final_output[10]).endswith(".zip"))
-
-    def test_stream_analysis_session_passes_knowledge_uploads_and_rag_toggle(self):
-        case_dir = self._workspace_case_dir()
-        upload = case_dir / "sample.csv"
-        upload.write_text("a,b\n1,2\n", encoding="utf-8")
-        knowledge = case_dir / "glossary.md"
-        knowledge.write_text("Domain glossary.", encoding="utf-8")
-        result = self._build_result(case_dir / "outputs" / "run_demo_rag")
-
-        def fake_run_analysis(*args, **kwargs):
-            self.assertFalse(kwargs["use_rag"])
-            self.assertFalse(kwargs["use_memory"])
-            self.assertEqual(len(kwargs["knowledge_paths"]), 1)
-            self.assertTrue(str(kwargs["knowledge_paths"][0]).endswith("glossary.md"))
-            self.assertEqual(kwargs["memory_scope_key"], "memory-scope-demo")
-            return result
-
-        with patch("data_analysis_agent.web.service.run_analysis", side_effect=fake_run_analysis):
-            outputs = list(
-                stream_analysis_session(
-                    upload.as_posix(),
-                    "demo query",
-                    "standard",
-                    "auto",
-                    "auto",
-                    "auto",
-                    6,
-                    1,
-                    20,
-                    5,
-                    3,
-                    1024,
-                    "table_02",
-                    (case_dir / "outputs").as_posix(),
-                    "Advanced Data Analyst",
-                    "",
-                    "demo-session",
-                    [knowledge.as_posix()],
-                    False,
-                    False,
-                    "memory-scope-demo",
-                )
-            )
-
-        self.assertIn("运行完成", outputs[-1][0])
 
 
 if __name__ == "__main__":

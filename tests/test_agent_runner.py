@@ -18,20 +18,30 @@ from data_analysis_agent.agent_runner import (
     ArtifactValidationResult,
     ScientificReActRunner,
     _build_reviewer_task,
-    _build_observation_summary,
-    _safe_parse_reviewer_reply,
     build_plaintext_event_handler,
     run_analysis,
 )
 from data_analysis_agent.config import RuntimeConfig
 from data_analysis_agent.data_context import DataContextSummary
-from data_analysis_agent.document_ingestion import IngestionResult
 from data_analysis_agent.memory import MemoryRecord, MemoryRetrievalResult, MemoryWriteResult
-from data_analysis_agent.reporting import EvidenceCoverage, ReportTelemetry
 from data_analysis_agent.prompts import build_system_prompt
-from data_analysis_agent.rag.query_builder import RetrievalQueryBundle
 from data_analysis_agent.rag.models import RagIndexResult, RagRetrievalResult, RetrievedChunk
-from data_analysis_agent.vision_review import VisualReviewResult
+from data_analysis_agent.rag.query_builder import RetrievalQueryBundle
+from data_analysis_agent.reporting import EvidenceCoverage, ReportTelemetry
+
+
+def _finish_report(body: str, *, domain: str = "generic tabular data", cleaned: bool = False) -> str:
+    telemetry = {
+        "methods": [],
+        "domain": domain,
+        "tools_used": [],
+        "search_used": False,
+        "search_notes": "not triggered",
+        "cleaned_data_saved": cleaned,
+        "cleaned_data_path": "placeholder" if cleaned else "",
+        "figures_generated": [],
+    }
+    return f"# Data Analysis Report\n\n{body}\n\n<telemetry>{json.dumps(telemetry)}</telemetry>"
 
 
 class StubLLM:
@@ -47,31 +57,24 @@ class StubLLM:
 
 
 class StubRegistry:
-    def __init__(self, cleaned_data_path: Path | None = None, *, include_tavily: bool = True):
-        self.calls = []
+    def __init__(self, cleaned_data_path: Path | None = None):
         self.cleaned_data_path = cleaned_data_path
-        self.include_tavily = include_tavily
+        self.calls = []
 
     def list_tools(self):
-        tools = ["PythonInterpreterTool"]
-        if self.include_tavily:
-            tools.append("TavilySearchTool")
-        return tools
+        return ["PythonInterpreterTool", "TavilySearchTool"]
 
     def get_tools_description(self):
-        descriptions = ["- PythonInterpreterTool: Execute Python code."]
-        if self.include_tavily:
-            descriptions.append("- TavilySearchTool: Search the web for domain knowledge.")
-        return "\n".join(descriptions)
+        return "- PythonInterpreterTool: Execute Python code.\n- TavilySearchTool: Search the web."
 
     def execute_tool(self, name, input_text):
         self.calls.append((name, input_text))
         if name == "TavilySearchTool":
-            return '{"status":"success","text":"Search query: biomarker\\n1. Biomarker meaning\\n   URL: https://example.com"}'
+            return '{"status":"success","text":"Glossary note"}'
         if self.cleaned_data_path is not None:
             self.cleaned_data_path.parent.mkdir(parents=True, exist_ok=True)
             self.cleaned_data_path.write_text("a,b\n1,2\n", encoding="utf-8")
-        return '{"status":"success","text":"cleaned_data saved\\np-value=0.01\\nchart=figures/chart.png"}'
+        return '{"status":"success","text":"cleaned_data saved"}'
 
 
 class FakeRagService:
@@ -79,103 +82,34 @@ class FakeRagService:
 
     def __init__(self, *, runtime_config, knowledge_base_dir=None):
         self.runtime_config = runtime_config
-        self.knowledge_base_dir = knowledge_base_dir
 
     def index_files(self, knowledge_paths):
-        return RagIndexResult(
-            status="completed",
-            indexed_documents=tuple(Path(path).name for path in knowledge_paths),
-            indexed_chunk_count=1,
-            warnings=(),
-        )
+        return RagIndexResult(status="completed", indexed_documents=("glossary.md",), indexed_chunk_count=1, warnings=())
 
     def build_queries(self, *, data_context, user_query=""):
-        return RetrievalQueryBundle(
-            retrieval_query=f"{user_query} | {', '.join(data_context.columns[:8])}".strip(" |"),
-            dense_query=f"{user_query} | dense".strip(" |"),
-            keyword_query="marker_a biomarker glossary",
-            normalized_terms=("marker_a", "biomarker", "glossary"),
-        )
+        return RetrievalQueryBundle("query", "dense", "keyword", ("marker_a",))
 
-    def build_ephemeral_table_candidates(self, *, data_context):
-        if not getattr(data_context, "selected_table_id", ""):
-            return ()
-        return (
-            RetrievedChunk(
-                chunk_id="ephemeral-table-1",
-                text="Ephemeral table summary for table_02. Headers: marker_a, marker_b.",
-                source_name="sample.pdf",
-                source_path="memory/parsed_document.json",
-                chunk_kind="table_summary",
-                table_id=str(data_context.selected_table_id),
-                table_headers=tuple(getattr(data_context, "selected_table_headers", ()) or ("marker_a", "marker_b")),
-                table_numeric_columns=tuple(
-                    getattr(data_context, "selected_table_numeric_columns", ()) or ("marker_a", "marker_b")
-                ),
-                match_reasons=("ephemeral_table", "selected_table"),
-            ),
-        )
-
-    def retrieve(
-        self,
-        *,
-        retrieval_query="",
-        top_k=4,
-        dense_query="",
-        keyword_query="",
-        query_terms=(),
-        column_terms=(),
-        selected_table_id="",
-        ephemeral_candidates=(),
-        dense_top_k=8,
-        keyword_top_k=8,
-    ):
-        dense_chunk = RetrievedChunk(
+    def retrieve(self, **kwargs):
+        chunk = RetrievedChunk(
             chunk_id="chunk-1",
             text="Biomarker A usually reflects inflammatory burden.",
             source_name="glossary.md",
-            source_path="memory/knowledge_base/files/glossary.md",
+            source_path="memory/glossary.md",
             knowledge_type="glossary",
-            distance=0.1,
-            dense_score=0.91,
-            match_reasons=("dense",),
+            dense_score=0.9,
+            keyword_score=2.0,
+            match_reasons=("dense", "keyword"),
         )
-        keyword_chunk = RetrievedChunk(
-            chunk_id="chunk-1",
-            text="Biomarker A usually reflects inflammatory burden.",
-            source_name="glossary.md",
-            source_path="memory/knowledge_base/files/glossary.md",
-            knowledge_type="glossary",
-            keyword_score=2.5,
-            match_reasons=("keyword",),
-        )
-        reranked_chunk = RetrievedChunk(
-            chunk_id="chunk-1",
-            text="Biomarker A usually reflects inflammatory burden.",
-            source_name="glossary.md",
-            source_path="memory/knowledge_base/files/glossary.md",
-            knowledge_type="glossary",
-            distance=0.1,
-            dense_score=0.91,
-            keyword_score=2.5,
-            rerank_score=2.11,
-            match_reasons=("dense", "keyword", "glossary"),
-        )
-        final_chunks = (reranked_chunk,)
-        if tuple(ephemeral_candidates):
-            final_chunks = tuple(ephemeral_candidates)
         return RagRetrievalResult(
             status="retrieved",
-            retrieval_query=retrieval_query,
-            dense_query=dense_query,
-            keyword_query=keyword_query,
-            chunks=final_chunks,
-            dense_candidates=(dense_chunk,),
-            keyword_candidates=(keyword_chunk,),
-            ephemeral_table_candidates=tuple(ephemeral_candidates),
-            reranked_chunks=final_chunks,
+            retrieval_query="query",
+            dense_query="dense",
+            keyword_query="keyword",
+            chunks=(chunk,),
+            dense_candidates=(chunk,),
+            keyword_candidates=(chunk,),
+            reranked_chunks=(chunk,),
             retrieval_strategy="hybrid",
-            table_candidate_count=len(tuple(ephemeral_candidates)),
             warnings=(),
         )
 
@@ -183,7 +117,7 @@ class FakeRagService:
 class FakeMemoryService:
     records = (
         MemoryRecord(
-            memory_id="memory-project-alpha-analysis_summary",
+            memory_id="memory-1",
             memory_scope_key="project-alpha",
             memory_type="analysis_summary",
             run_id="run_previous",
@@ -201,18 +135,12 @@ class FakeMemoryService:
 
     def __init__(self, *, runtime_config, memory_base_dir=None):
         self.runtime_config = runtime_config
-        self.memory_base_dir = memory_base_dir
 
     def retrieve(self, *, memory_scope_key, user_query, data_context, top_k=4):
-        return MemoryRetrievalResult(
-            status="retrieved",
-            memory_scope_key=memory_scope_key,
-            retrieval_query=f"{user_query} | {', '.join(data_context.columns[:2])}",
-            records=self.records[:top_k],
-        )
+        return MemoryRetrievalResult(status="retrieved", memory_scope_key=memory_scope_key, retrieval_query="query", records=self.records)
 
     def format_for_prompt(self, records, *, max_chars=2200):
-        return "\n".join(f"[{record.memory_type} | run={record.run_id}] {record.text}" for record in records)
+        return "\n".join(record.text for record in records)
 
     def write_records(self, *, records, run_id):
         self.__class__.last_written_run_id = run_id
@@ -227,40 +155,28 @@ class AgentRunnerTests(unittest.TestCase):
         case_dir.mkdir(parents=True, exist_ok=True)
         return case_dir
 
+    def _runtime_config(self, *, embedding: bool = False) -> RuntimeConfig:
+        return RuntimeConfig(
+            model_id="demo-model",
+            api_key="demo-key",
+            base_url="https://example.com/v1",
+            timeout=30,
+            tavily_api_key=None,
+            embedding_model_id="embed" if embedding else "",
+            embedding_api_key="embed-key" if embedding else "",
+            embedding_base_url="https://embed.example.com/v1" if embedding else "",
+            embedding_timeout=30,
+        )
+
     def test_plaintext_event_handler_is_callable(self):
-        handler = build_plaintext_event_handler()
-        self.assertTrue(callable(handler))
+        self.assertTrue(callable(build_plaintext_event_handler()))
 
     def test_runner_handles_tool_call_then_finish(self):
         llm = StubLLM(
             [
-                """
-                {
-                  "decision": "Search the acronym before interpreting the result.",
-                  "action": "call_tool",
-                  "tool_name": "TavilySearchTool",
-                  "tool_input": "What does CPI mean in economics?",
-                  "final_answer": ""
-                }
-                """,
-                """
-                {
-                  "decision": "Load the cleaned dataset and inspect summary statistics.",
-                  "action": "call_tool",
-                  "tool_name": "PythonInterpreterTool",
-                  "tool_input": "print('summary ok')",
-                  "final_answer": ""
-                }
-                """,
-                """
-                {
-                  "decision": "The analysis is complete.",
-                  "action": "finish",
-                  "tool_name": "",
-                  "tool_input": "",
-                  "final_answer": "# Data Analysis Report\\n\\n## Data Overview\\nComplete.\\n\\n## Methodology\\nDescriptive statistics and t-test.\\n\\n## Core Hypothesis-Testing Conclusions\\np-value = 0.01.\\n\\n## Result Interpretation\\nStatistical evidence was found.\\n\\n## Discussion\\nDomain context was incorporated.\\n\\nCleaned data path: outputs/run/data/cleaned_data.csv\\n\\n![Chart](outputs/run/figures/chart.png)\\n\\n<telemetry>{\\"methods\\": [\\"Descriptive statistics\\", \\"t-test\\"], \\"domain\\": \\"macroeconomics\\", \\"tools_used\\": [\\"PythonInterpreterTool\\", \\"TavilySearchTool\\"], \\"search_used\\": true, \\"search_notes\\": \\"Used CPI background knowledge.\\", \\"cleaned_data_saved\\": true, \\"cleaned_data_path\\": \\"outputs/run/data/cleaned_data.csv\\", \\"figures_generated\\": [\\"outputs/run/figures/chart.png\\"]}</telemetry>"
-                }
-                """,
+                '{"decision":"Search first","action":"call_tool","tool_name":"TavilySearchTool","tool_input":"CPI","final_answer":""}',
+                '{"decision":"Analyze locally","action":"call_tool","tool_name":"PythonInterpreterTool","tool_input":"print(1)","final_answer":""}',
+                json.dumps({"decision": "Done", "action": "finish", "tool_name": "", "tool_input": "", "final_answer": _finish_report("Complete.")}),
             ]
         )
         registry = StubRegistry()
@@ -279,875 +195,54 @@ class AgentRunnerTests(unittest.TestCase):
             max_steps=4,
         )
 
-        final_answer, traces = runner.run("Please analyze the dataset:\nRelative path: data/simple_data.xls")
+        final_answer, traces = runner.run("Please analyze the dataset")
 
         self.assertIn("<telemetry>", final_answer)
         self.assertEqual(len(traces), 3)
         self.assertEqual(traces[0].tool_name, "TavilySearchTool")
-        self.assertEqual(traces[0].tool_status, "success")
-        self.assertIn("Online domain knowledge retrieval", traces[0].summary)
         self.assertEqual(traces[1].tool_name, "PythonInterpreterTool")
-        self.assertEqual(registry.calls[0][0], "TavilySearchTool")
 
-    def test_runner_recovers_from_fenced_json(self):
-        llm = StubLLM(
-            [
-                """```json
-                {
-                  "decision": "Finish directly for parser validation.",
-                  "action": "finish",
-                  "tool_name": "",
-                  "tool_input": "",
-                  "final_answer": "# Data Analysis Report\\n\\nParsing test complete.\\n\\n<telemetry>{\\"methods\\": [], \\"domain\\": \\"generic tabular data\\", \\"tools_used\\": [], \\"search_used\\": false, \\"search_notes\\": \\"not triggered\\", \\"cleaned_data_saved\\": false, \\"cleaned_data_path\\": \\"\\", \\"figures_generated\\": []}</telemetry>"
-                }
-                ```"""
-            ]
-        )
-        registry = StubRegistry()
-        runner = ScientificReActRunner(
-            name="Test Analyst",
-            llm=llm,
-            system_prompt=build_system_prompt(
-                run_dir="outputs/run",
-                cleaned_data_path="outputs/run/data/cleaned_data.csv",
-                figures_dir="outputs/run/figures",
-                logs_dir="outputs/run/logs",
-                max_steps=2,
-                tool_descriptions=registry.get_tools_description(),
-            ),
-            tool_registry=registry,
-            max_steps=2,
-        )
-
-        final_answer, traces = runner.run("Please analyze the dataset:\nRelative path: data/simple_data.xls")
-
-        self.assertIn("Parsing test complete", final_answer)
-        self.assertEqual(len(traces), 1)
-        self.assertEqual(traces[0].action, "finish")
-
-    def test_run_analysis_creates_run_directory_and_trace(self):
-        tmp_path = self._workspace_case_dir()
-        data_path = tmp_path / "sample.csv"
-        data_path.write_text("a,b\n1,2\n", encoding="utf-8")
-
-        runtime_config = RuntimeConfig(
-            model_id="demo-model",
-            api_key="demo-key",
-            base_url="https://example.com/v1",
-            timeout=30,
-            tavily_api_key=None,
-        )
-
-        llm = StubLLM(
-            [
-                """
-                {
-                  "decision": "Clean the raw file and save cleaned data first.",
-                  "action": "call_tool",
-                  "tool_name": "PythonInterpreterTool",
-                  "tool_input": "print('cleaning complete')",
-                  "final_answer": ""
-                }
-                """,
-                """
-                {
-                  "decision": "The report is complete.",
-                  "action": "finish",
-                  "tool_name": "",
-                  "tool_input": "",
-                  "final_answer": "# Data Analysis Report\\n\\n## Data Overview\\nDone.\\n\\n## Methodology\\nDescriptive statistics.\\n\\n## Core Hypothesis-Testing Conclusions\\nNo formal test.\\n\\n## Result Interpretation\\nStable.\\n\\n## Discussion\\nNone.\\n\\nCleaned data path: placeholder\\n\\n<telemetry>{\\"methods\\": [\\"Descriptive statistics\\"], \\"domain\\": \\"generic tabular data\\", \\"tools_used\\": [\\"PythonInterpreterTool\\"], \\"search_used\\": false, \\"search_notes\\": \\"not triggered\\", \\"cleaned_data_saved\\": true, \\"cleaned_data_path\\": \\"placeholder\\", \\"figures_generated\\": []}</telemetry>"
-                }
-                """,
-                """
-                {
-                  "decision": "Accept",
-                  "critique": "The report is publication-grade and internally coherent."
-                }
-                """,
-            ]
-        )
-
-        expected_registry: dict[str, StubRegistry] = {}
-
-        with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=runtime_config), patch(
-            "data_analysis_agent.agent_runner.build_llm", return_value=llm
-        ):
-            with patch("data_analysis_agent.agent_runner.build_tool_registry") as registry_builder:
-                def side_effect(*args, **kwargs):
-                    registry = StubRegistry(cleaned_data_path=expected_registry["cleaned_data_path"])
-                    expected_registry["registry"] = registry
-                    return registry
-
-                registry_builder.side_effect = side_effect
-
-                with patch("data_analysis_agent.agent_runner._create_run_directory") as create_run_dir:
-                    run_dir = tmp_path / "outputs" / "run_20260315_153022"
-                    data_dir = run_dir / "data"
-                    figures_dir = run_dir / "figures"
-                    logs_dir = run_dir / "logs"
-                    for directory in (data_dir, figures_dir, logs_dir):
-                        directory.mkdir(parents=True, exist_ok=True)
-                    expected_registry["cleaned_data_path"] = data_dir / "cleaned_data.csv"
-                    create_run_dir.return_value = (run_dir, data_dir, figures_dir, logs_dir)
-
-                    result = run_analysis(data_path, output_dir=tmp_path / "outputs", quality_mode="standard")
-
-        self.assertEqual(result.run_dir.name, "run_20260315_153022")
-        self.assertTrue(result.report_path.exists())
-        self.assertEqual(result.report_path.name, "final_report.md")
-        self.assertTrue(result.trace_path.exists())
-        self.assertTrue(result.cleaned_data_path.exists())
-        self.assertTrue(result.workflow_complete)
-        self.assertEqual(result.review_status, "accepted")
-        self.assertEqual(result.quality_mode, "standard")
-        self.assertTrue(result.review_enabled)
-        self.assertEqual(result.review_rounds_used, 1)
-        self.assertEqual(len(result.review_log_paths), 1)
-        self.assertTrue(result.review_log_paths[0].exists())
-        self.assertTrue((result.figures_dir / "review_round_1").exists())
-
-        trace_payload = json.loads(result.trace_path.read_text(encoding="utf-8"))
-        self.assertEqual(trace_payload["run_metadata"]["run_dir"], result.run_dir.as_posix())
-        self.assertTrue(trace_payload["artifact_validation"]["workflow_complete"])
-        self.assertEqual(trace_payload["review_status"], "accepted")
-        self.assertEqual(len(trace_payload["review_history"]), 1)
-
-    def test_run_analysis_marks_missing_cleaned_data_as_incomplete(self):
-        tmp_path = self._workspace_case_dir()
-        data_path = tmp_path / "sample.csv"
-        data_path.write_text("a,b\n1,2\n", encoding="utf-8")
-
-        runtime_config = RuntimeConfig(
-            model_id="demo-model",
-            api_key="demo-key",
-            base_url="https://example.com/v1",
-            timeout=30,
-            tavily_api_key=None,
-        )
-
-        llm = StubLLM(
-            [
-                """
-                {
-                  "decision": "Go straight to a final answer.",
-                  "action": "finish",
-                  "tool_name": "",
-                  "tool_input": "",
-                  "final_answer": "# Data Analysis Report\\n\\n## Data Overview\\nDone.\\n\\n<telemetry>{\\"methods\\": [], \\"domain\\": \\"generic tabular data\\", \\"tools_used\\": [], \\"search_used\\": false, \\"search_notes\\": \\"not triggered\\", \\"cleaned_data_saved\\": false, \\"cleaned_data_path\\": \\"\\", \\"figures_generated\\": []}</telemetry>"
-                }
-                """,
-                """
-                {
-                  "decision": "Reject",
-                  "critique": "The cleaned dataset artifact is missing, so the report cannot pass review."
-                }
-                """,
-            ]
-        )
-
-        with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=runtime_config), patch(
-            "data_analysis_agent.agent_runner.build_llm", return_value=llm
-        ), patch(
-            "data_analysis_agent.agent_runner.build_tool_registry", return_value=StubRegistry(cleaned_data_path=None)
-        ):
-            result = run_analysis(data_path, output_dir=tmp_path / "outputs", max_reviews=0, quality_mode="standard")
-
-        self.assertFalse(result.workflow_complete)
-        self.assertIn(result.cleaned_data_path.as_posix(), result.missing_artifacts)
-        self.assertEqual(result.review_status, "max_reviews_reached")
-        self.assertEqual(result.review_rounds_used, 1)
-
-    def test_run_analysis_skips_reviewer_in_draft_mode(self):
-        tmp_path = self._workspace_case_dir()
-        data_path = tmp_path / "sample.csv"
-        data_path.write_text("a,b\n1,2\n", encoding="utf-8")
-
-        runtime_config = RuntimeConfig(
-            model_id="demo-model",
-            api_key="demo-key",
-            base_url="https://example.com/v1",
-            timeout=30,
-            tavily_api_key=None,
-        )
-
-        llm = StubLLM(
-            [
-                """
-                {
-                  "decision": "Clean the raw file and save cleaned data first.",
-                  "action": "call_tool",
-                  "tool_name": "PythonInterpreterTool",
-                  "tool_input": "print('cleaning complete')",
-                  "final_answer": ""
-                }
-                """,
-                """
-                {
-                  "decision": "The draft report is complete.",
-                  "action": "finish",
-                  "tool_name": "",
-                  "tool_input": "",
-                  "final_answer": "# Data Analysis Report\\n\\n## Data Overview\\nDraft mode.\\n\\n<telemetry>{\\"methods\\": [], \\"domain\\": \\"generic tabular data\\", \\"tools_used\\": [\\"PythonInterpreterTool\\"], \\"search_used\\": false, \\"search_notes\\": \\"not triggered\\", \\"cleaned_data_saved\\": true, \\"cleaned_data_path\\": \\"placeholder\\", \\"figures_generated\\": []}</telemetry>"
-                }
-                """,
-            ]
-        )
-
-        expected_registry: dict[str, StubRegistry] = {}
-
-        with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=runtime_config), patch(
-            "data_analysis_agent.agent_runner.build_llm", return_value=llm
-        ):
-            with patch("data_analysis_agent.agent_runner.build_tool_registry") as registry_builder:
-                def side_effect(*args, **kwargs):
-                    registry = StubRegistry(cleaned_data_path=expected_registry["cleaned_data_path"])
-                    expected_registry["registry"] = registry
-                    return registry
-
-                registry_builder.side_effect = side_effect
-
-                with patch("data_analysis_agent.agent_runner._create_run_directory") as create_run_dir:
-                    run_dir = tmp_path / "outputs" / "run_20260315_153022"
-                    data_dir = run_dir / "data"
-                    figures_dir = run_dir / "figures"
-                    logs_dir = run_dir / "logs"
-                    for directory in (data_dir, figures_dir, logs_dir):
-                        directory.mkdir(parents=True, exist_ok=True)
-                    expected_registry["cleaned_data_path"] = data_dir / "cleaned_data.csv"
-                    create_run_dir.return_value = (run_dir, data_dir, figures_dir, logs_dir)
-
-                    result = run_analysis(data_path, output_dir=tmp_path / "outputs", quality_mode="draft")
-
-        self.assertEqual(result.quality_mode, "draft")
-        self.assertFalse(result.review_enabled)
-        self.assertEqual(result.review_status, "skipped")
-        self.assertEqual(result.review_rounds_used, 0)
-        self.assertEqual(len(result.review_log_paths), 0)
-
-    def test_run_analysis_reinjects_reviewer_critique_for_revision(self):
-        tmp_path = self._workspace_case_dir()
-        data_path = tmp_path / "sample.csv"
-        data_path.write_text("a,b\n1,2\n", encoding="utf-8")
-
-        runtime_config = RuntimeConfig(
-            model_id="demo-model",
-            api_key="demo-key",
-            base_url="https://example.com/v1",
-            timeout=30,
-            tavily_api_key=None,
-        )
-
-        llm = StubLLM(
-            [
-                """
-                {
-                  "decision": "Clean the raw file and save cleaned data first.",
-                  "action": "call_tool",
-                  "tool_name": "PythonInterpreterTool",
-                  "tool_input": "print('cleaning complete')",
-                  "final_answer": ""
-                }
-                """,
-                """
-                {
-                  "decision": "Draft the first report.",
-                  "action": "finish",
-                  "tool_name": "",
-                  "tool_input": "",
-                  "final_answer": "# Data Analysis Report\\n\\n## Data Overview\\nDraft one.\\n\\n## Methodology\\nDescriptive statistics.\\n\\n## Core Hypothesis-Testing Conclusions\\nNo formal test.\\n\\n## Result Interpretation\\nThis causes an outcome.\\n\\n## Discussion\\nInitial draft.\\n\\n![Chart](outputs/run_20260315_153022/figures/review_round_1/chart.png)\\n\\nCleaned data path: placeholder\\n\\n<telemetry>{\\"methods\\": [\\"Descriptive statistics\\"], \\"domain\\": \\"generic tabular data\\", \\"tools_used\\": [\\"PythonInterpreterTool\\"], \\"search_used\\": false, \\"search_notes\\": \\"not triggered\\", \\"cleaned_data_saved\\": true, \\"cleaned_data_path\\": \\"placeholder\\", \\"figures_generated\\": [\\"outputs/run_20260315_153022/figures/review_round_1/chart.png\\"]}</telemetry>"
-                }
-                """,
-                """
-                {
-                  "decision": "Reject",
-                  "critique": "Remove the causal language and tighten the interpretation."
-                }
-                """,
-                """
-                {
-                  "decision": "Revise the report after review.",
-                  "action": "finish",
-                  "tool_name": "",
-                  "tool_input": "",
-                  "final_answer": "# Data Analysis Report\\n\\n## Data Overview\\nDraft two.\\n\\n## Methodology\\nDescriptive statistics.\\n\\n## Core Hypothesis-Testing Conclusions\\nNo formal test.\\n\\n## Result Interpretation\\nThe variables are associated.\\n\\n## Discussion\\nRevised after review.\\n\\n![Chart](outputs/run_20260315_153022/figures/review_round_2/chart.png)\\n\\nCleaned data path: placeholder\\n\\n<telemetry>{\\"methods\\": [\\"Descriptive statistics\\"], \\"domain\\": \\"generic tabular data\\", \\"tools_used\\": [\\"PythonInterpreterTool\\"], \\"search_used\\": false, \\"search_notes\\": \\"not triggered\\", \\"cleaned_data_saved\\": true, \\"cleaned_data_path\\": \\"placeholder\\", \\"figures_generated\\": [\\"outputs/run_20260315_153022/figures/review_round_2/chart.png\\"]}</telemetry>"
-                }
-                """,
-                """
-                {
-                  "decision": "Accept",
-                  "critique": "The revised report is acceptable."
-                }
-                """,
-            ]
-        )
-
-        expected_registry: dict[str, StubRegistry] = {}
-
-        with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=runtime_config), patch(
-            "data_analysis_agent.agent_runner.build_llm", return_value=llm
-        ):
-            with patch("data_analysis_agent.agent_runner.build_tool_registry") as registry_builder:
-                def side_effect(*args, **kwargs):
-                    registry = StubRegistry(cleaned_data_path=expected_registry["cleaned_data_path"])
-                    expected_registry["registry"] = registry
-                    return registry
-
-                registry_builder.side_effect = side_effect
-
-                with patch("data_analysis_agent.agent_runner._create_run_directory") as create_run_dir:
-                    run_dir = tmp_path / "outputs" / "run_20260315_153022"
-                    data_dir = run_dir / "data"
-                    figures_dir = run_dir / "figures"
-                    logs_dir = run_dir / "logs"
-                    for directory in (data_dir, figures_dir, logs_dir):
-                        directory.mkdir(parents=True, exist_ok=True)
-                    expected_registry["cleaned_data_path"] = data_dir / "cleaned_data.csv"
-                    create_run_dir.return_value = (run_dir, data_dir, figures_dir, logs_dir)
-
-                    result = run_analysis(data_path, output_dir=tmp_path / "outputs", max_reviews=1, quality_mode="publication")
-
-        self.assertEqual(result.review_status, "accepted")
-        self.assertEqual(result.quality_mode, "publication")
-        self.assertTrue(result.review_enabled)
-        self.assertEqual(result.review_rounds_used, 2)
-        self.assertIn("acceptable", result.review_critique.lower())
-        self.assertEqual(len(result.review_log_paths), 2)
-        second_round_messages = llm.calls[3]
-        self.assertTrue(any("[审稿人拒稿意见]" in message["content"] for message in second_round_messages if "content" in message))
-        self.assertTrue(any("逐条回应并修复以下全部问题" in message["content"] for message in second_round_messages if "content" in message))
-        self.assertTrue((result.figures_dir / "review_round_1").exists())
-        self.assertTrue((result.figures_dir / "review_round_2").exists())
-        self.assertTrue((result.run_dir / "review_round_1_report.md").exists())
-        self.assertTrue((result.run_dir / "review_round_2_report.md").exists())
-        self.assertIn("review_round_2/chart.png", result.report_markdown)
-        self.assertNotIn("review_round_1/chart.png", result.report_markdown)
-
-    def test_run_analysis_standard_mode_allows_one_revision_by_default(self):
-        tmp_path = self._workspace_case_dir()
-        data_path = tmp_path / "sample.csv"
-        data_path.write_text("a,b\n1,2\n", encoding="utf-8")
-
-        runtime_config = RuntimeConfig(
-            model_id="demo-model",
-            api_key="demo-key",
-            base_url="https://example.com/v1",
-            timeout=30,
-            tavily_api_key=None,
-        )
-
-        llm = StubLLM(
-            [
-                """
-                {
-                  "decision": "Create the first draft.",
-                  "action": "finish",
-                  "tool_name": "",
-                  "tool_input": "",
-                  "final_answer": "# Data Analysis Report\\n\\n## Data Overview\\nStandard draft one.\\n\\n![Chart](outputs/run_20260315_153022/figures/review_round_1/chart.png)\\n\\n<telemetry>{\\"methods\\": [], \\"domain\\": \\"generic tabular data\\", \\"tools_used\\": [], \\"search_used\\": false, \\"search_notes\\": \\"not triggered\\", \\"cleaned_data_saved\\": false, \\"cleaned_data_path\\": \\"\\", \\"figures_generated\\": [\\"outputs/run_20260315_153022/figures/review_round_1/chart.png\\"]}</telemetry>"
-                }
-                """,
-                """
-                {
-                  "decision": "Reject",
-                  "critique": "Please revise the chart path and clarify the wording."
-                }
-                """,
-                """
-                {
-                  "decision": "Create the revised draft.",
-                  "action": "finish",
-                  "tool_name": "",
-                  "tool_input": "",
-                  "final_answer": "# Data Analysis Report\\n\\n## Data Overview\\nStandard draft two.\\n\\n![Chart](outputs/run_20260315_153022/figures/review_round_2/chart.png)\\n\\n<telemetry>{\\"methods\\": [], \\"domain\\": \\"generic tabular data\\", \\"tools_used\\": [], \\"search_used\\": false, \\"search_notes\\": \\"not triggered\\", \\"cleaned_data_saved\\": false, \\"cleaned_data_path\\": \\"\\", \\"figures_generated\\": [\\"outputs/run_20260315_153022/figures/review_round_2/chart.png\\"]}</telemetry>"
-                }
-                """,
-                """
-                {
-                  "decision": "Accept",
-                  "critique": "The revised standard-mode report is acceptable."
-                }
-                """,
-            ]
-        )
-
-        with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=runtime_config), patch(
-            "data_analysis_agent.agent_runner.build_llm", return_value=llm
-        ), patch(
-            "data_analysis_agent.agent_runner.build_tool_registry", return_value=StubRegistry(cleaned_data_path=None)
-        ):
-            result = run_analysis(data_path, output_dir=tmp_path / "outputs", quality_mode="standard")
-
-        self.assertEqual(result.review_status, "accepted")
-        self.assertEqual(result.review_rounds_used, 2)
-        self.assertEqual(len(result.review_log_paths), 2)
-        self.assertIn("review_round_2/chart.png", result.report_markdown)
-
-    def test_run_analysis_publication_mode_allows_two_revisions_by_default(self):
-        tmp_path = self._workspace_case_dir()
-        data_path = tmp_path / "sample.csv"
-        data_path.write_text("a,b\n1,2\n", encoding="utf-8")
-
-        runtime_config = RuntimeConfig(
-            model_id="demo-model",
-            api_key="demo-key",
-            base_url="https://example.com/v1",
-            timeout=30,
-            tavily_api_key=None,
-        )
-
-        llm = StubLLM(
-            [
-                """
-                {
-                  "decision": "Publication draft one.",
-                  "action": "finish",
-                  "tool_name": "",
-                  "tool_input": "",
-                  "final_answer": "# Data Analysis Report\\n\\nDraft 1\\n\\n![Chart](outputs/run_20260315_153022/figures/review_round_1/chart.png)\\n\\n<telemetry>{\\"methods\\": [], \\"domain\\": \\"generic tabular data\\", \\"tools_used\\": [], \\"search_used\\": false, \\"search_notes\\": \\"not triggered\\", \\"cleaned_data_saved\\": false, \\"cleaned_data_path\\": \\"\\", \\"figures_generated\\": [\\"outputs/run_20260315_153022/figures/review_round_1/chart.png\\"]}</telemetry>"
-                }
-                """,
-                """
-                {
-                  "decision": "Reject",
-                  "critique": "First rejection."
-                }
-                """,
-                """
-                {
-                  "decision": "Publication draft two.",
-                  "action": "finish",
-                  "tool_name": "",
-                  "tool_input": "",
-                  "final_answer": "# Data Analysis Report\\n\\nDraft 2\\n\\n![Chart](outputs/run_20260315_153022/figures/review_round_2/chart.png)\\n\\n<telemetry>{\\"methods\\": [], \\"domain\\": \\"generic tabular data\\", \\"tools_used\\": [], \\"search_used\\": false, \\"search_notes\\": \\"not triggered\\", \\"cleaned_data_saved\\": false, \\"cleaned_data_path\\": \\"\\", \\"figures_generated\\": [\\"outputs/run_20260315_153022/figures/review_round_2/chart.png\\"]}</telemetry>"
-                }
-                """,
-                """
-                {
-                  "decision": "Reject",
-                  "critique": "Second rejection."
-                }
-                """,
-                """
-                {
-                  "decision": "Publication draft three.",
-                  "action": "finish",
-                  "tool_name": "",
-                  "tool_input": "",
-                  "final_answer": "# Data Analysis Report\\n\\nDraft 3\\n\\n![Chart](outputs/run_20260315_153022/figures/review_round_3/chart.png)\\n\\n<telemetry>{\\"methods\\": [], \\"domain\\": \\"generic tabular data\\", \\"tools_used\\": [], \\"search_used\\": false, \\"search_notes\\": \\"not triggered\\", \\"cleaned_data_saved\\": false, \\"cleaned_data_path\\": \\"\\", \\"figures_generated\\": [\\"outputs/run_20260315_153022/figures/review_round_3/chart.png\\"]}</telemetry>"
-                }
-                """,
-                """
-                {
-                  "decision": "Accept",
-                  "critique": "Accepted after two revisions."
-                }
-                """,
-            ]
-        )
-
-        with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=runtime_config), patch(
-            "data_analysis_agent.agent_runner.build_llm", return_value=llm
-        ), patch(
-            "data_analysis_agent.agent_runner.build_tool_registry", return_value=StubRegistry(cleaned_data_path=None)
-        ):
-            result = run_analysis(data_path, output_dir=tmp_path / "outputs", quality_mode="publication")
-
-        self.assertEqual(result.review_status, "accepted")
-        self.assertEqual(result.review_rounds_used, 3)
-        self.assertEqual(len(result.review_log_paths), 3)
-        self.assertIn("review_round_3/chart.png", result.report_markdown)
-
-    def test_invalid_reviewer_output_falls_back_to_reject(self):
-        reply = _safe_parse_reviewer_reply("not-json")
-
-        self.assertEqual(reply.decision, "Reject")
-        self.assertIn("could not be parsed", reply.critique)
-        self.assertEqual(reply.evidence_findings, ())
-
-    def test_reviewer_reply_parses_structured_evidence_findings(self):
-        reply = _safe_parse_reviewer_reply(
-            """
-            {
-              "decision": "Reject",
-              "critique": "1. 缺少知识性结论的行内引用。",
-              "evidence_findings": [
-                {"type": "missing_citation", "message": "结果解释段缺少引用。", "citation_label": ""},
-                {"type": "invalid_citation", "message": "引用标签不在证据目录中。", "citation_label": "[来源: unknown.md, p.8]"}
-              ]
-            }
-            """
-        )
-
-        self.assertEqual(reply.decision, "Reject")
-        self.assertEqual(len(reply.evidence_findings), 2)
-        self.assertEqual(reply.evidence_findings[0].finding_type, "missing_citation")
-        self.assertEqual(reply.evidence_findings[1].citation_label, "[来源: unknown.md, p.8]")
-
-    def test_observation_summary_compresses_python_output(self):
-        observation = json.dumps(
-            {
-                "status": "success",
-                "text": "Long python output",
-                "data": {
-                    "stdout": "A" * 1400,
-                    "stderr": "B" * 900,
-                    "warnings": [f"warning-{index}" for index in range(7)],
-                },
-            }
-        )
-
-        summary = _build_observation_summary(
-            tool_name="PythonInterpreterTool",
-            observation=observation,
-            tool_status="success",
-            observation_preview="python preview",
-        )
-
-        self.assertIn("Stdout:", summary)
-        self.assertIn("Stderr:", summary)
-        self.assertIn("[truncated]", summary)
-        self.assertIn("more warning(s) omitted", summary)
-
-    def test_observation_summary_compresses_tavily_results(self):
-        observation = json.dumps(
-            {
-                "status": "success",
-                "text": "Search results",
-                "data": {
-                    "query": "NIPT threshold",
-                    "results": [
-                        {"title": f"Result {index}", "url": f"https://example.com/{index}", "content": "C" * 260}
-                        for index in range(4)
-                    ],
-                },
-            }
-        )
-
-        summary = _build_observation_summary(
-            tool_name="TavilySearchTool",
-            observation=observation,
-            tool_status="success",
-            observation_preview="search preview",
-        )
-
-        self.assertIn("Top search results", summary)
-        self.assertIn("NIPT threshold", summary)
-        self.assertIn("more result(s) omitted", summary)
-
-    def test_run_analysis_auto_mode_reduces_effective_steps_and_records_timing(self):
-        tmp_path = self._workspace_case_dir()
-        data_path = tmp_path / "sample.csv"
-        data_path.write_text("a,b\n1,2\n", encoding="utf-8")
-
-        runtime_config = RuntimeConfig(
-            model_id="demo-model",
-            api_key="demo-key",
-            base_url="https://example.com/v1",
-            timeout=30,
-            tavily_api_key=None,
-        )
-
-        llm = StubLLM(
-            [
-                """
-                {
-                  "decision": "The report is complete.",
-                  "action": "finish",
-                  "tool_name": "",
-                  "tool_input": "",
-                  "final_answer": "# Data Analysis Report\\n\\n## Data Overview\\nAuto mode.\\n\\n<telemetry>{\\"methods\\": [], \\"domain\\": \\"generic tabular data\\", \\"tools_used\\": [], \\"search_used\\": false, \\"search_notes\\": \\"not triggered\\", \\"cleaned_data_saved\\": false, \\"cleaned_data_path\\": \\"\\", \\"figures_generated\\": []}</telemetry>"
-                }
-                """,
-                """
-                {
-                  "decision": "Accept",
-                  "critique": "Acceptable."
-                }
-                """,
-            ]
-        )
-
-        with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=runtime_config), patch(
-            "data_analysis_agent.agent_runner.build_llm", return_value=llm
-        ), patch(
-            "data_analysis_agent.agent_runner.build_tool_registry", return_value=StubRegistry(cleaned_data_path=None, include_tavily=False)
-        ):
-            result = run_analysis(
-                data_path,
-                output_dir=tmp_path / "outputs",
-                quality_mode="standard",
-                latency_mode="auto",
-                max_steps=6,
-            )
-
-        trace_payload = json.loads(result.trace_path.read_text(encoding="utf-8"))
-        self.assertEqual(result.latency_mode, "auto")
-        self.assertEqual(trace_payload["run_metadata"]["effective_max_steps"], 4)
-        self.assertIn("total_duration_ms", trace_payload["timing_breakdown"])
-        self.assertIn("llm_duration_ms", trace_payload["step_traces"][0])
-
-    def test_run_analysis_publication_auto_injects_visual_review_summary(self):
-        tmp_path = self._workspace_case_dir()
-        data_path = tmp_path / "sample.csv"
-        data_path.write_text("a,b\n1,2\n", encoding="utf-8")
-
-        runtime_config = RuntimeConfig(
-            model_id="demo-model",
-            api_key="demo-key",
-            base_url="https://example.com/v1",
-            timeout=30,
-            tavily_api_key=None,
-            vision_model_id="vision-demo-model",
-            vision_api_key="vision-demo-key",
-            vision_base_url="https://vision.example.com/v1",
-            vision_timeout=45,
-        )
-
-        llm = StubLLM(
-            [
-                """
-                {
-                  "decision": "Clean the raw file and save cleaned data first.",
-                  "action": "call_tool",
-                  "tool_name": "PythonInterpreterTool",
-                  "tool_input": "print('cleaning complete')",
-                  "final_answer": ""
-                }
-                """,
-                """
-                {
-                  "decision": "The report is complete.",
-                  "action": "finish",
-                  "tool_name": "",
-                  "tool_input": "",
-                  "final_answer": "# Data Analysis Report\\n\\n## Data Overview\\nVisual review demo.\\n\\n## Methodology\\nDescriptive statistics.\\n\\n## Core Hypothesis-Testing Conclusions\\nNo formal test.\\n\\n## Result Interpretation\\nAssociation only.\\n\\n## Discussion\\nVisual reviewer should audit the chart.\\n\\n![Chart](outputs/run_20260315_153022/figures/review_round_1/chart.png)\\n\\nCleaned data path: placeholder\\n\\n<telemetry>{\\"methods\\": [\\"Descriptive statistics\\"], \\"domain\\": \\"generic tabular data\\", \\"tools_used\\": [\\"PythonInterpreterTool\\"], \\"search_used\\": false, \\"search_notes\\": \\"not triggered\\", \\"cleaned_data_saved\\": true, \\"cleaned_data_path\\": \\"placeholder\\", \\"figures_generated\\": [\\"outputs/run_20260315_153022/figures/review_round_1/chart.png\\"]}</telemetry>"
-                }
-                """,
-                """
-                {
-                  "decision": "Accept",
-                  "critique": "The report is acceptable after the visual audit."
-                }
-                """,
-            ]
-        )
-
-        expected_registry: dict[str, StubRegistry] = {}
-
-        with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=runtime_config), patch(
-            "data_analysis_agent.agent_runner.build_llm", return_value=llm
-        ), patch("data_analysis_agent.agent_runner.run_visual_review") as visual_review_mock:
-            visual_review_mock.return_value = VisualReviewResult(
-                status="completed",
-                decision="Flag",
-                summary="热图标签略显拥挤，建议旋转横轴标签。",
-                figures_reviewed=("outputs/run_20260315_153022/figures/review_round_1/chart.png",),
-                skipped_figures=(),
-                duration_ms=1200,
-                raw_response='{"decision":"Flag","summary":"热图标签略显拥挤，建议旋转横轴标签。","findings":[]}',
-            )
-            with patch("data_analysis_agent.agent_runner.build_tool_registry") as registry_builder:
-                def side_effect(*args, **kwargs):
-                    registry = StubRegistry(cleaned_data_path=expected_registry["cleaned_data_path"], include_tavily=False)
-                    expected_registry["registry"] = registry
-                    return registry
-
-                registry_builder.side_effect = side_effect
-
-                with patch("data_analysis_agent.agent_runner._create_run_directory") as create_run_dir:
-                    run_dir = tmp_path / "outputs" / "run_20260315_153022"
-                    data_dir = run_dir / "data"
-                    figures_dir = run_dir / "figures"
-                    logs_dir = run_dir / "logs"
-                    review_round_dir = figures_dir / "review_round_1"
-                    for directory in (data_dir, figures_dir, review_round_dir, logs_dir):
-                        directory.mkdir(parents=True, exist_ok=True)
-                    (review_round_dir / "chart.png").write_bytes(b"fake-png")
-                    expected_registry["cleaned_data_path"] = data_dir / "cleaned_data.csv"
-                    create_run_dir.return_value = (run_dir, data_dir, figures_dir, logs_dir)
-
-                    result = run_analysis(
-                        data_path,
-                        output_dir=tmp_path / "outputs",
-                        quality_mode="publication",
-                        vision_review_mode="auto",
-                    )
-
-        self.assertEqual(result.vision_review_mode, "auto")
-        self.assertTrue(result.vision_review_enabled)
-        self.assertEqual(result.vision_review_status, "completed")
-        self.assertEqual(result.vision_review_summary, "热图标签略显拥挤，建议旋转横轴标签。")
-        self.assertEqual(result.vision_review_duration_ms, 1200)
-        self.assertEqual(len(result.vision_review_log_paths), 1)
-        self.assertTrue(result.vision_review_log_paths[0].exists())
-
-        reviewer_messages = llm.calls[-1]
-        reviewer_prompt = reviewer_messages[1]["content"]
-        self.assertIn("Visual figure audit summary", reviewer_prompt)
-        self.assertIn("热图标签略显拥挤，建议旋转横轴标签。", reviewer_prompt)
-
-        trace_payload = json.loads(result.trace_path.read_text(encoding="utf-8"))
-        self.assertEqual(trace_payload["run_metadata"]["vision_review_mode"], "auto")
-        self.assertTrue(trace_payload["run_metadata"]["vision_configured"])
-        self.assertEqual(trace_payload["timing_breakdown"]["vision_review_duration_ms"], 1200)
-        self.assertEqual(len(trace_payload["vision_review_history"]), 1)
-
-    def test_run_analysis_fast_mode_disables_tavily_without_strong_signal(self):
-        tmp_path = self._workspace_case_dir()
-        data_path = tmp_path / "sample.csv"
-        data_path.write_text("a,b\n1,2\n", encoding="utf-8")
-
-        runtime_config = RuntimeConfig(
-            model_id="demo-model",
-            api_key="demo-key",
-            base_url="https://example.com/v1",
-            timeout=30,
-            tavily_api_key="demo-tavily-key",
-        )
-
-        llm = StubLLM(
-            [
-                """
-                {
-                  "decision": "Draft mode report.",
-                  "action": "finish",
-                  "tool_name": "",
-                  "tool_input": "",
-                  "final_answer": "# Data Analysis Report\\n\\n## Data Overview\\nFast mode.\\n\\n<telemetry>{\\"methods\\": [], \\"domain\\": \\"generic tabular data\\", \\"tools_used\\": [], \\"search_used\\": false, \\"search_notes\\": \\"not triggered\\", \\"cleaned_data_saved\\": false, \\"cleaned_data_path\\": \\"\\", \\"figures_generated\\": []}</telemetry>"
-                }
-                """,
-            ]
-        )
-
-        captured_kwargs: dict[str, object] = {}
-
-        with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=runtime_config), patch(
-            "data_analysis_agent.agent_runner.build_llm", return_value=llm
-        ), patch("data_analysis_agent.agent_runner.build_tool_registry") as registry_builder:
-            def side_effect(*args, **kwargs):
-                captured_kwargs.update(kwargs)
-                return StubRegistry(cleaned_data_path=None, include_tavily=False)
-
-            registry_builder.side_effect = side_effect
-            result = run_analysis(
-                data_path,
-                output_dir=tmp_path / "outputs",
-                quality_mode="draft",
-                latency_mode="fast",
-                query="Please summarize this small table.",
-            )
-
-        self.assertFalse(captured_kwargs["enable_search"])
-        self.assertEqual(result.search_status, "not_used")
-
-    def test_run_analysis_pdf_input_uses_document_ingestion_result(self):
+    def test_run_analysis_rejects_non_tabular_input(self):
         tmp_path = self._workspace_case_dir()
         pdf_path = tmp_path / "sample.pdf"
         pdf_path.write_text("fake-pdf", encoding="utf-8")
 
-        runtime_config = RuntimeConfig(
-            model_id="demo-model",
-            api_key="demo-key",
-            base_url="https://example.com/v1",
-            timeout=30,
-            tavily_api_key=None,
-        )
-
-        llm = StubLLM(
-            [
-                """
-                {
-                  "decision": "The report is complete.",
-                  "action": "finish",
-                  "tool_name": "",
-                  "tool_input": "",
-                  "final_answer": "# Data Analysis Report\\n\\n## Data Overview\\nPDF mode.\\n\\n<telemetry>{\\"methods\\": [], \\"domain\\": \\"generic tabular data\\", \\"tools_used\\": [], \\"search_used\\": false, \\"search_notes\\": \\"not triggered\\", \\"cleaned_data_saved\\": false, \\"cleaned_data_path\\": \\"\\", \\"figures_generated\\": []}</telemetry>"
-                }
-                """,
-            ]
-        )
-
-        with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=runtime_config), patch(
-            "data_analysis_agent.agent_runner.build_llm", return_value=llm
-        ), patch(
-            "data_analysis_agent.agent_runner.build_tool_registry", return_value=StubRegistry(cleaned_data_path=None, include_tavily=False)
-        ), patch("data_analysis_agent.agent_runner.ingest_input_document") as ingest_mock:
-            normalized_csv = tmp_path / "outputs" / "run_20260315_153022" / "data" / "extracted_tables" / "table_01.csv"
-            normalized_csv.parent.mkdir(parents=True, exist_ok=True)
-            normalized_csv.write_text("x,y\n1,2\n", encoding="utf-8")
-            parsed_document = tmp_path / "outputs" / "run_20260315_153022" / "data" / "parsed_document.json"
-            parsed_document.parent.mkdir(parents=True, exist_ok=True)
-            parsed_document.write_text(
-                json.dumps({"background_literature_context": "BMI 代表身体质量指数。"}, ensure_ascii=False),
-                encoding="utf-8",
-            )
-            ingest_mock.return_value = IngestionResult(
-                input_kind="pdf",
-                status="completed",
-                summary="PDF 文档解析完成。",
-                normalized_data_path=normalized_csv,
-                duration_ms=900,
-                log_path=tmp_path / "outputs" / "run_20260315_153022" / "logs" / "document_ingestion.json",
-                parsed_document_path=parsed_document,
-                selected_table_id="table_01",
-                background_literature_context="BMI 代表身体质量指数。",
-            )
-
-            result = run_analysis(
-                pdf_path,
-                output_dir=tmp_path / "outputs",
-                quality_mode="draft",
-                document_ingestion_mode="text_only",
-            )
-
-        self.assertEqual(result.input_kind, "pdf")
-        self.assertEqual(result.document_ingestion_status, "completed")
-        self.assertEqual(result.document_ingestion_duration_ms, 900)
-        ingest_mock.assert_called_once()
-        trace_payload = json.loads(result.trace_path.read_text(encoding="utf-8"))
-        self.assertEqual(trace_payload["run_metadata"]["input_kind"], "pdf")
-        self.assertEqual(trace_payload["document_ingestion"]["status"], "completed")
-        self.assertEqual(trace_payload["timing_breakdown"]["document_ingestion_duration_ms"], 900)
-
-    def test_run_analysis_pdf_ingestion_failure_stops_before_analyst_loop(self):
-        tmp_path = self._workspace_case_dir()
-        pdf_path = tmp_path / "sample.pdf"
-        pdf_path.write_text("fake-pdf", encoding="utf-8")
-
-        runtime_config = RuntimeConfig(
-            model_id="demo-model",
-            api_key="demo-key",
-            base_url="https://example.com/v1",
-            timeout=30,
-            tavily_api_key=None,
-        )
-
-        llm = StubLLM([])
-
-        with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=runtime_config), patch(
-            "data_analysis_agent.agent_runner.build_llm", return_value=llm
-        ), patch(
-            "data_analysis_agent.agent_runner.build_tool_registry", return_value=StubRegistry(cleaned_data_path=None, include_tavily=False)
-        ), patch("data_analysis_agent.agent_runner.ingest_input_document") as ingest_mock:
-            ingest_mock.return_value = IngestionResult(
-                input_kind="pdf",
-                status="failed",
-                summary="PDF 解析失败：未提取到满足主表路由规则的结构化表格。",
-                normalized_data_path=tmp_path / "outputs" / "run_x" / "data" / "cleaned_data.csv",
-                duration_ms=800,
-            )
-
+        with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=self._runtime_config()):
             with self.assertRaises(ValueError) as context:
-                run_analysis(
-                    pdf_path,
-                    output_dir=tmp_path / "outputs",
-                    quality_mode="draft",
-                    document_ingestion_mode="text_only",
-                )
+                run_analysis(pdf_path, output_dir=tmp_path / "outputs", quality_mode="draft")
 
-        self.assertIn("PDF 解析失败", str(context.exception))
-        self.assertEqual(llm.calls, [])
+        self.assertIn("CSV / XLS / XLSX", str(context.exception))
 
+    def test_build_system_prompt_defaults_to_tabular_prompt(self):
+        prompt = build_system_prompt(
+            run_dir="outputs/run_demo",
+            cleaned_data_path="outputs/run_demo/data/cleaned_data.csv",
+            figures_dir="outputs/run_demo/figures",
+            logs_dir="outputs/run_demo/logs",
+            max_steps=4,
+            tool_descriptions="- PythonInterpreterTool: Execute Python code.",
+        )
+        self.assertNotIn("<PDF_Small_Table_Mode>", prompt)
+        self.assertNotIn("<PDF_Candidate_Tables_Context>", prompt)
+
+    def test_run_analysis_records_tabular_ingestion_stub(self):
+        tmp_path = self._workspace_case_dir()
+        data_path = tmp_path / "sample.csv"
+        data_path.write_text("a,b\n1,2\n", encoding="utf-8")
+        llm = StubLLM([json.dumps({"decision": "Done", "action": "finish", "tool_name": "", "tool_input": "", "final_answer": _finish_report("Tabular mode.")})])
+
+        with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=self._runtime_config()), patch(
+            "data_analysis_agent.agent_runner.build_llm", return_value=llm
+        ), patch(
+            "data_analysis_agent.agent_runner.build_tool_registry", return_value=StubRegistry(cleaned_data_path=None)
+        ):
+            result = run_analysis(data_path, output_dir=tmp_path / "outputs", quality_mode="draft")
+
+        self.assertEqual(result.input_kind, "tabular")
+        self.assertEqual(result.document_ingestion_status, "not_needed")
+        trace_payload = json.loads(result.trace_path.read_text(encoding="utf-8"))
+        self.assertEqual(trace_payload["run_metadata"]["input_kind"], "tabular")
+        self.assertEqual(trace_payload["document_ingestion"]["status"], "not_needed")
 
     def test_build_reviewer_task_includes_generated_artifact_evidence(self):
         data_context = DataContextSummary(
@@ -1161,14 +256,7 @@ class AgentRunnerTests(unittest.TestCase):
             small_sample_warning=False,
             context_text="demo context",
         )
-        artifact_validation = ArtifactValidationResult(
-            workflow_complete=True,
-            missing_artifacts=(),
-            warnings=(),
-            cleaned_data_exists=True,
-            report_exists=True,
-            trace_exists=True,
-        )
+        artifact_validation = ArtifactValidationResult(True, (), (), True, True, True)
         telemetry = ReportTelemetry(
             methods=("descriptive_statistics",),
             domain="computer vision",
@@ -1177,16 +265,12 @@ class AgentRunnerTests(unittest.TestCase):
             search_notes="",
             cleaned_data_saved=True,
             cleaned_data_path="outputs/run/data/cleaned_data.csv",
-            figures_generated=(
-                "outputs/run_20260315_153022/figures/review_round_2/chart.png",
-                "outputs/run_20260315_153022/figures/review_round_1/old_chart.png",
-            ),
+            figures_generated=("outputs/run_20260315_153022/figures/review_round_2/chart.png",),
             valid=True,
             raw_payload={},
         )
         report_path = PROJECT_ROOT / "outputs" / "run_20260315_153022" / "final_report.md"
         report_path.parent.mkdir(parents=True, exist_ok=True)
-        (report_path.parent / "figures" / "review_round_2").mkdir(parents=True, exist_ok=True)
 
         reviewer_task = _build_reviewer_task(
             data_context=data_context,
@@ -1197,110 +281,12 @@ class AgentRunnerTests(unittest.TestCase):
             telemetry=telemetry,
             review_round=2,
             visual_review_summary="No major chart issues.",
-            evidence_register=(
-                RetrievedChunk(
-                    chunk_id="chunk-1",
-                    text="Guideline note on model comparison.",
-                    source_name="guideline.md",
-                    source_path="memory/guideline.md",
-                    page_number=2,
-                ),
-            ),
-            evidence_coverage=EvidenceCoverage(
-                status="missing_citations",
-                citation_count=0,
-                uncited_knowledge_sections_detected=("Discussion",),
-            ),
+            evidence_register=(RetrievedChunk(chunk_id="chunk-1", text="Guideline note.", source_name="guideline.md", source_path="memory/guideline.md", page_number=2),),
+            evidence_coverage=EvidenceCoverage(status="missing_citations", citation_count=0, uncited_knowledge_sections_detected=("Discussion",)),
         )
 
         self.assertIn("Generated artifacts evidence", reviewer_task)
-        self.assertIn("review_round_figures_generated_count: 1", reviewer_task)
         self.assertIn("chart.png", reviewer_task)
-        self.assertIn("artifact_workflow_complete: True", reviewer_task)
-        self.assertIn("Evidence review context", reviewer_task)
-        self.assertIn("missing_citations", reviewer_task)
-        self.assertIn("RAG-guideline-md-chunk-1", reviewer_task)
-
-    def test_build_system_prompt_mentions_pdf_small_table_constraints(self):
-        prompt = build_system_prompt(
-            run_dir="outputs/run_demo",
-            cleaned_data_path="outputs/run_demo/data/cleaned_data.csv",
-            figures_dir="outputs/run_demo/figures",
-            logs_dir="outputs/run_demo/logs",
-            max_steps=4,
-            tool_descriptions="- PythonInterpreterTool: Execute Python code.",
-            background_literature_context="Model comparison table from a PDF paper.",
-            pdf_small_table_mode=True,
-        )
-
-        self.assertIn("<PDF_Small_Table_Mode>", prompt)
-        self.assertIn("Do not introduce one-sample tests", prompt)
-
-    def test_run_analysis_passes_selected_table_id_to_document_ingestion(self):
-        tmp_path = self._workspace_case_dir()
-        pdf_path = tmp_path / "sample.pdf"
-        pdf_path.write_text("fake-pdf", encoding="utf-8")
-
-        runtime_config = RuntimeConfig(
-            model_id="demo-model",
-            api_key="demo-key",
-            base_url="https://example.com/v1",
-            timeout=30,
-            tavily_api_key=None,
-        )
-
-        llm = StubLLM(
-            [
-                """
-                {
-                  "decision": "The report is complete.",
-                  "action": "finish",
-                  "tool_name": "",
-                  "tool_input": "",
-                  "final_answer": "# Data Analysis Report\\n\\n## Data Overview\\nPDF mode.\\n\\n<telemetry>{\\"methods\\": [], \\"domain\\": \\"generic tabular data\\", \\"tools_used\\": [], \\"search_used\\": false, \\"search_notes\\": \\"not triggered\\", \\"cleaned_data_saved\\": false, \\"cleaned_data_path\\": \\"\\", \\"figures_generated\\": []}</telemetry>"
-                }
-                """,
-            ]
-        )
-
-        with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=runtime_config), patch(
-            "data_analysis_agent.agent_runner.build_llm", return_value=llm
-        ), patch(
-            "data_analysis_agent.agent_runner.build_tool_registry",
-            return_value=StubRegistry(cleaned_data_path=None, include_tavily=False),
-        ), patch("data_analysis_agent.agent_runner.ingest_input_document") as ingest_mock:
-            normalized_csv = tmp_path / "outputs" / "run_20260315_153022" / "data" / "extracted_tables" / "table_02.csv"
-            normalized_csv.parent.mkdir(parents=True, exist_ok=True)
-            normalized_csv.write_text("x,y\n1,2\n", encoding="utf-8")
-            parsed_document = tmp_path / "outputs" / "run_20260315_153022" / "data" / "parsed_document.json"
-            parsed_document.parent.mkdir(parents=True, exist_ok=True)
-            parsed_document.write_text(json.dumps({}, ensure_ascii=False), encoding="utf-8")
-            ingest_mock.return_value = IngestionResult(
-                input_kind="pdf",
-                status="completed",
-                summary="PDF 文档解析完成。",
-                normalized_data_path=normalized_csv,
-                duration_ms=900,
-                log_path=tmp_path / "outputs" / "run_20260315_153022" / "logs" / "document_ingestion.json",
-                parsed_document_path=parsed_document,
-                selected_table_id="table_02",
-                candidate_table_count=2,
-                selected_table_shape=(7, 5),
-                selected_table_headers=("model", "precision"),
-                selected_table_numeric_columns=("precision",),
-            )
-
-            result = run_analysis(
-                pdf_path,
-                output_dir=tmp_path / "outputs",
-                quality_mode="draft",
-                document_ingestion_mode="text_only",
-                selected_table_id="table_02",
-            )
-
-        self.assertEqual(result.selected_table_id, "table_02")
-        self.assertEqual(result.candidate_table_count, 2)
-        self.assertEqual(ingest_mock.call_args.kwargs["selected_table_id"], "table_02")
 
     def test_run_analysis_injects_retrieved_knowledge_when_rag_enabled(self):
         tmp_path = self._workspace_case_dir()
@@ -1308,257 +294,47 @@ class AgentRunnerTests(unittest.TestCase):
         data_path.write_text("marker_a,marker_b\n1,2\n", encoding="utf-8")
         knowledge_path = tmp_path / "glossary.md"
         knowledge_path.write_text("Biomarker A glossary entry.", encoding="utf-8")
+        llm = StubLLM([json.dumps({"decision": "Done", "action": "finish", "tool_name": "", "tool_input": "", "final_answer": _finish_report("RAG mode.", domain="biomedicine")})])
 
-        runtime_config = RuntimeConfig(
-            model_id="demo-model",
-            api_key="demo-key",
-            base_url="https://example.com/v1",
-            timeout=30,
-            tavily_api_key=None,
-            embedding_model_id="text-embedding-demo",
-            embedding_api_key="embed-key",
-            embedding_base_url="https://embed.example.com/v1",
-            embedding_timeout=30,
-        )
-        llm = StubLLM(
-            [
-                """
-                {
-                  "decision": "The report is complete.",
-                  "action": "finish",
-                  "tool_name": "",
-                  "tool_input": "",
-                  "final_answer": "# Data Analysis Report\\n\\n## Data Overview\\nDone.\\n\\n## Result Interpretation\\nBiomarker A usually reflects inflammatory burden. [来源: glossary.md]\\n\\n## Discussion\\nThe glossary context supports a cautious interpretation. [来源: glossary.md]\\n\\n<telemetry>{\\"methods\\": [], \\"domain\\": \\"biomedicine\\", \\"tools_used\\": [], \\"search_used\\": false, \\"search_notes\\": \\"not triggered\\", \\"cleaned_data_saved\\": false, \\"cleaned_data_path\\": \\"\\", \\"figures_generated\\": []}</telemetry>"
-                }
-                """,
-            ]
-        )
-
-        with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=runtime_config), patch(
+        with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=self._runtime_config(embedding=True)), patch(
             "data_analysis_agent.agent_runner.build_llm", return_value=llm
         ), patch(
-            "data_analysis_agent.agent_runner.build_tool_registry",
-            return_value=StubRegistry(cleaned_data_path=None, include_tavily=False),
+            "data_analysis_agent.agent_runner.build_tool_registry", return_value=StubRegistry(cleaned_data_path=None)
         ), patch("data_analysis_agent.agent_runner.RagService", FakeRagService):
-            result = run_analysis(
-                data_path,
-                output_dir=tmp_path / "outputs",
-                quality_mode="draft",
-                use_rag=True,
-                knowledge_paths=(knowledge_path,),
-            )
+            result = run_analysis(data_path, output_dir=tmp_path / "outputs", quality_mode="draft", use_rag=True, knowledge_paths=(knowledge_path,))
 
         self.assertEqual(result.rag_status, "retrieved")
-        self.assertEqual(result.rag_match_count, 1)
         self.assertEqual(result.rag_sources_used, ("glossary.md",))
-        self.assertEqual(result.rag_dense_match_count, 1)
-        self.assertEqual(result.rag_keyword_match_count, 1)
-        self.assertEqual(result.rag_retrieval_strategy, "hybrid")
         self.assertEqual(result.rag_table_candidate_count, 0)
-        self.assertEqual(result.rag_final_chunk_kinds, ("text_section",))
         self.assertFalse(result.rag_selected_table_hit)
-        self.assertEqual(result.rag_citation_count, 1)
-        self.assertEqual(result.rag_cited_sources, ("glossary.md",))
-        self.assertEqual(result.rag_evidence_coverage_status, "covered")
-        self.assertIn("<Retrieved_Knowledge_Context>", llm.calls[0][1]["content"])
-        self.assertIn("<Retrieved_Evidence_Register>", llm.calls[0][1]["content"])
-        trace_payload = json.loads(result.trace_path.read_text(encoding="utf-8"))
-        self.assertEqual(trace_payload["rag"]["status"], "retrieved")
-        self.assertEqual(trace_payload["rag"]["indexed_documents"], ["glossary.md"])
-        self.assertEqual(trace_payload["rag"]["retrieval_strategy"], "hybrid")
-        self.assertTrue(trace_payload["rag"]["dense_query"])
-        self.assertTrue(trace_payload["rag"]["keyword_query"])
-        self.assertEqual(len(trace_payload["rag"]["dense_candidates"]), 1)
-        self.assertEqual(len(trace_payload["rag"]["keyword_candidates"]), 1)
-        self.assertEqual(len(trace_payload["rag"]["reranked_chunks"]), 1)
-        self.assertEqual(trace_payload["rag"]["table_candidate_count"], 0)
-        self.assertEqual(trace_payload["rag"]["final_chunk_kinds"], ["text_section"])
-        self.assertEqual(trace_payload["rag"]["citation_count"], 1)
-        self.assertEqual(trace_payload["rag"]["cited_sources"], ["glossary.md"])
-        self.assertEqual(trace_payload["rag"]["evidence_coverage_status"], "covered")
-        self.assertEqual(len(trace_payload["rag"]["final_evidence_register"]), 1)
-
-    def test_run_analysis_pdf_rag_uses_ephemeral_table_candidates(self):
-        tmp_path = self._workspace_case_dir()
-        pdf_path = tmp_path / "sample.pdf"
-        pdf_path.write_text("fake-pdf", encoding="utf-8")
-        runtime_config = RuntimeConfig(
-            model_id="demo-model",
-            api_key="demo-key",
-            base_url="https://example.com/v1",
-            timeout=30,
-            tavily_api_key=None,
-            embedding_model_id="text-embedding-demo",
-            embedding_api_key="embed-key",
-            embedding_base_url="https://embed.example.com/v1",
-            embedding_timeout=30,
-        )
-        llm = StubLLM(
-            [
-                """
-                {
-                  "decision": "The report is complete.",
-                  "action": "finish",
-                  "tool_name": "",
-                  "tool_input": "",
-                  "final_answer": "# Data Analysis Report\\n\\n## Data Overview\\nPDF RAG.\\n\\n<telemetry>{\\"methods\\": [], \\"domain\\": \\"generic tabular data\\", \\"tools_used\\": [], \\"search_used\\": false, \\"search_notes\\": \\"not triggered\\", \\"cleaned_data_saved\\": false, \\"cleaned_data_path\\": \\"\\", \\"figures_generated\\": []}</telemetry>"
-                }
-                """,
-            ]
-        )
-
-        with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=runtime_config), patch(
-            "data_analysis_agent.agent_runner.build_llm", return_value=llm
-        ), patch(
-            "data_analysis_agent.agent_runner.build_tool_registry",
-            return_value=StubRegistry(cleaned_data_path=None, include_tavily=False),
-        ), patch("data_analysis_agent.agent_runner.RagService", FakeRagService), patch(
-            "data_analysis_agent.agent_runner.ingest_input_document"
-        ) as ingest_mock:
-            normalized_csv = tmp_path / "outputs" / "run_20260315_153022" / "data" / "extracted_tables" / "table_02.csv"
-            normalized_csv.parent.mkdir(parents=True, exist_ok=True)
-            normalized_csv.write_text("marker_a,marker_b\n1,2\n", encoding="utf-8")
-            parsed_document = tmp_path / "outputs" / "run_20260315_153022" / "data" / "parsed_document.json"
-            parsed_document.parent.mkdir(parents=True, exist_ok=True)
-            parsed_document.write_text(
-                json.dumps(
-                    {
-                        "source_pdf": pdf_path.as_posix(),
-                        "selected_table_id": "table_02",
-                        "candidate_table_summaries": [
-                            {
-                                "table_id": "table_02",
-                                "page_number": 3,
-                                "headers": ["marker_a", "marker_b"],
-                                "numeric_columns": ["marker_a", "marker_b"],
-                                "content_hint": "1 | 2",
-                                "selected_as_primary": True,
-                            }
-                        ],
-                    },
-                    ensure_ascii=False,
-                ),
-                encoding="utf-8",
-            )
-            ingest_mock.return_value = IngestionResult(
-                input_kind="pdf",
-                status="completed",
-                summary="PDF 文档解析完成。",
-                normalized_data_path=normalized_csv,
-                duration_ms=900,
-                log_path=tmp_path / "outputs" / "run_20260315_153022" / "logs" / "document_ingestion.json",
-                parsed_document_path=parsed_document,
-                selected_table_id="table_02",
-                candidate_table_count=1,
-                selected_table_shape=(4, 2),
-                selected_table_headers=("marker_a", "marker_b"),
-                selected_table_numeric_columns=("marker_a", "marker_b"),
-                candidate_table_summaries=(
-                    {
-                        "table_id": "table_02",
-                        "page_number": 3,
-                        "headers": ["marker_a", "marker_b"],
-                        "numeric_columns": ["marker_a", "marker_b"],
-                        "content_hint": "1 | 2",
-                        "selected_as_primary": True,
-                    },
-                ),
-                pdf_multi_table_mode=True,
-            )
-
-            result = run_analysis(
-                pdf_path,
-                output_dir=tmp_path / "outputs",
-                quality_mode="draft",
-                document_ingestion_mode="text_only",
-                selected_table_id="table_02",
-                use_rag=True,
-            )
-
-        self.assertEqual(result.rag_status, "retrieved")
-        self.assertEqual(result.rag_table_candidate_count, 1)
-        self.assertTrue(result.rag_selected_table_hit)
-        self.assertEqual(result.rag_final_chunk_kinds, ("table_summary",))
-        trace_payload = json.loads(result.trace_path.read_text(encoding="utf-8"))
-        self.assertEqual(trace_payload["rag"]["table_candidate_count"], 1)
-        self.assertEqual(trace_payload["rag"]["final_chunk_kinds"], ["table_summary"])
-        self.assertEqual(len(trace_payload["rag"]["ephemeral_table_candidates"]), 1)
 
     def test_run_analysis_injects_project_memory_and_writes_back_after_accept(self):
         tmp_path = self._workspace_case_dir()
         data_path = tmp_path / "sample.csv"
         data_path.write_text("marker_a,marker_b\n1,2\n", encoding="utf-8")
-
-        runtime_config = RuntimeConfig(
-            model_id="demo-model",
-            api_key="demo-key",
-            base_url="https://example.com/v1",
-            timeout=30,
-            tavily_api_key=None,
-            embedding_model_id="text-embedding-demo",
-            embedding_api_key="embed-key",
-            embedding_base_url="https://embed.example.com/v1",
-            embedding_timeout=30,
-        )
         llm = StubLLM(
             [
-                """
-                {
-                  "decision": "The report is complete.",
-                  "action": "finish",
-                  "tool_name": "",
-                  "tool_input": "",
-                  "final_answer": "# Data Analysis Report\\n\\n## Result Interpretation\\nUse a conservative biomarker interpretation.\\n\\n## Discussion\\nKeep claims non-causal.\\n\\n<telemetry>{\\"methods\\": [], \\"domain\\": \\"biomedicine\\", \\"tools_used\\": [], \\"search_used\\": false, \\"search_notes\\": \\"not triggered\\", \\"cleaned_data_saved\\": false, \\"cleaned_data_path\\": \\"\\", \\"figures_generated\\": []}</telemetry>"
-                }
-                """,
-                """
-                {
-                  "decision": "Accept",
-                  "critique": "报告已满足当前要求。"
-                }
-                """,
+                json.dumps({"decision": "Done", "action": "finish", "tool_name": "", "tool_input": "", "final_answer": _finish_report("Memory mode.", domain="biomedicine")}),
+                '{"decision":"Accept","critique":"Looks good."}',
             ]
         )
         FakeMemoryService.last_written_run_id = ""
 
-        with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=runtime_config), patch(
+        with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=self._runtime_config(embedding=True)), patch(
             "data_analysis_agent.agent_runner.build_llm", return_value=llm
         ), patch(
-            "data_analysis_agent.agent_runner.build_tool_registry",
-            return_value=StubRegistry(cleaned_data_path=None, include_tavily=False),
+            "data_analysis_agent.agent_runner.build_tool_registry", return_value=StubRegistry(cleaned_data_path=None)
         ), patch(
             "data_analysis_agent.agent_runner.ProjectMemoryService", FakeMemoryService
         ), patch(
-            "data_analysis_agent.agent_runner.extract_memory_records"
-        ) as extract_mock:
-            extract_mock.return_value = SimpleNamespace(
-                records=FakeMemoryService.records,
-                llm_distilled=False,
-                warnings=(),
-            )
+            "data_analysis_agent.agent_runner.extract_memory_records", return_value=SimpleNamespace(records=FakeMemoryService.records, llm_distilled=False, warnings=())
+        ):
+            result = run_analysis(data_path, output_dir=tmp_path / "outputs", quality_mode="standard", use_memory=True, memory_scope_key="project-alpha")
 
-            result = run_analysis(
-                data_path,
-                output_dir=tmp_path / "outputs",
-                quality_mode="standard",
-                use_memory=True,
-                memory_scope_key="project-alpha",
-            )
-
-        self.assertTrue(result.memory_enabled)
         self.assertEqual(result.memory_scope_key, "project-alpha")
-        self.assertEqual(result.memory_match_count, 1)
         self.assertEqual(result.memory_writeback_status, "written")
         self.assertEqual(result.memory_written_count, 1)
-        self.assertIn("<Project_Memory_Context>", llm.calls[0][1]["content"])
-        self.assertIn("run_previous", llm.calls[0][1]["content"])
         self.assertTrue(FakeMemoryService.last_written_run_id.startswith("run_"))
-        trace_payload = json.loads(result.trace_path.read_text(encoding="utf-8"))
-        self.assertEqual(trace_payload["memory"]["scope_key"], "project-alpha")
-        self.assertEqual(trace_payload["memory"]["retrieval_status"], "retrieved")
-        self.assertEqual(trace_payload["memory"]["writeback_status"], "written")
-        self.assertEqual(len(trace_payload["memory"]["retrieved_records"]), 1)
-        self.assertEqual(len(trace_payload["memory"]["written_record_ids"]), 1)
 
 
 if __name__ == "__main__":

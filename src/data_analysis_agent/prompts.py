@@ -87,8 +87,6 @@ Academic Guardrails / 统计学汇报规范:
 - For t-tests, prefer reporting Cohen's d together with a 95% CI. For ANOVA, prefer reporting eta squared (η²) together with a 95% CI or an explicitly justified interval estimate when available.
 - If you compare more than 2 groups and perform pairwise comparisons, you must apply Bonferroni correction or Tukey HSD in code and state the correction method explicitly in the report.
 - If data_context contains a small-sample warning, treat it as a serious methodological constraint. Prefer non-parametric tests such as Mann-Whitney U or Kruskal-Wallis unless you have a strong printed justification for parametric assumptions.
-- If <PDF_Small_Table_Mode> appears in the context, you must use the lightweight template for small PDF results tables. Unless the data clearly contains repeated observations or explicit experimental groups with valid sample replication, do not invent hypothesis tests.
-- If <PDF_Candidate_Tables_Context> appears in the context, treat the selected primary table as the only table for formal quantitative analysis. Use the remaining candidate tables only as contextual evidence for interpretation, cross-checking, and discussion.
 - In the final report, you must explicitly warn when a small sample size limits distributional assumptions, inferential stability, or generalizability.
 - In Result Interpretation, Discussion, and Conclusion sections, strictly separate correlation from causation.
 - Without experimental design, random assignment, or causal identification evidence, do not use causal wording such as “导致”, “引发”, “造成”, or “证明 X 影响 Y”.
@@ -118,7 +116,7 @@ Execution rules:
 14. {search_policy_block}
 15. Latency mode for this run: {latency_mode}. {fast_path_block}
 16. If the user context includes a <Retrieved_Evidence_Register> block, any knowledge-based interpretation that relies on retrieved background knowledge must include at least one inline citation label copied exactly from that register.
-17. Knowledge-based interpretation includes terminology explanations, domain meaning of indicators, literature background, guideline-style interpretation, and any explanation that uses non-primary PDF candidate tables as contextual evidence.
+17. Knowledge-based interpretation includes terminology explanations, domain meaning of indicators, literature background, and guideline-style interpretation.
 18. Do not invent citation labels, source names, page numbers, table ids, or evidence ids. Use only the citation labels supplied in the evidence register.
 19. Statistical findings computed directly from the dataset do not require RAG citations unless you explicitly combine them with retrieved background knowledge in the same conclusion.
 20. If the user context includes a <Project_Memory_Context> block, treat it as historical project memory only: reusable preferences, previously accepted constraints, and prior framing hints.
@@ -214,7 +212,6 @@ def build_reviewer_prompt(review_mode: str, *, focus_major_issues: bool = False)
 - Verify that any knowledge-based explanation grounded in retrieved evidence includes at least one inline citation label taken from the supplied evidence register.
 - Reject if the report uses an inline citation label that does not appear in the supplied evidence register.
 - Reject if a cited evidence label is clearly mismatched with the claim it is supposed to support.
-- Reject if the report treats a non-primary PDF candidate table as formal quantitative evidence instead of contextual interpretation support.
 - Verify that the report does not clearly violate stable project-level preferences or reviewer constraints supplied in the project memory context.
 """
         decision_policy = """Decision policy:
@@ -234,7 +231,6 @@ def build_reviewer_prompt(review_mode: str, *, focus_major_issues: bool = False)
 - Verify that any knowledge-based explanation grounded in retrieved evidence includes at least one inline citation label taken from the supplied evidence register.
 - Reject if the report uses an inline citation label that does not appear in the supplied evidence register.
 - Reject if a cited evidence label is clearly mismatched with the claim it is supposed to support.
-- Reject if the report treats a non-primary PDF candidate table as formal quantitative evidence instead of contextual interpretation support.
 - Verify that the report does not clearly violate stable project-level preferences or reviewer constraints supplied in the project memory context.
 """
         decision_policy = """Decision policy:

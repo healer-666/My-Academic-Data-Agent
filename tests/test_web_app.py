@@ -97,7 +97,7 @@ class _FakeGradio(types.SimpleNamespace):
 
 
 class WebAppTests(unittest.TestCase):
-    def test_build_demo_constructs_multi_page_chinese_workbench(self):
+    def test_build_demo_constructs_tabular_and_history_qa_workbench(self):
         _FakeComponent.instances = []
         fake_gradio = _FakeGradio()
         with patch("data_analysis_agent.web.app.gr", fake_gradio), patch(
@@ -114,6 +114,9 @@ class WebAppTests(unittest.TestCase):
                 None,
                 None,
             ),
+        ), patch(
+            "data_analysis_agent.web.app.load_history_qa_runs",
+            return_value=([("run_demo | finance | accepted | 2026-04-14", "run_demo")], ["run_demo"]),
         ):
             demo = app.build_demo()
 
@@ -123,56 +126,56 @@ class WebAppTests(unittest.TestCase):
         self.assertIn("theme", demo.kwargs)
         self.assertIn("css", demo.kwargs)
         self.assertIn("min-height:700px", demo.kwargs["css"].replace(" ", ""))
-        self.assertNotIn("position: sticky", demo.kwargs["css"])
 
         text_fragments = [
             component.args[0]
             for component in _FakeComponent.instances
             if component.args and isinstance(component.args[0], str)
         ]
-        self.assertTrue(any("学术数据智能体工作台" in text for text in text_fragments))
-        self.assertTrue(any("运行总览" in text for text in text_fragments))
-        self.assertTrue(any("历史与导航" in text for text in text_fragments))
+        self.assertTrue(any("结构化表格数据" in text for text in text_fragments))
+        self.assertTrue(any("历史问答" in text for text in text_fragments))
 
         tab_labels = [component.args[0] for component in _FakeComponent.instances if component.component_type == "Tab"]
-        for expected_tab in ["总览", "发起分析", "运行结果", "历史记录"]:
+        for expected_tab in ["总览", "发起分析", "运行结果", "历史记录", "历史问答"]:
             self.assertIn(expected_tab, tab_labels)
 
         labels = [component.kwargs.get("label") for component in _FakeComponent.instances]
         self.assertIn("数据文件", labels)
         self.assertIn("报告质量档位", labels)
-        self.assertIn("文档解析模式", labels)
         self.assertIn("视觉审稿", labels)
         self.assertIn("启用 Project Memory 回忆", labels)
-        self.assertIn("Memory scope 标签", labels)
-        self.assertIn("主表选择", labels)
-        self.assertIn("历史运行记录", labels)
+        self.assertIn("问答运行范围", labels)
+        self.assertIn("问答模式", labels)
+        self.assertNotIn("文档解析模式", labels)
+        self.assertNotIn("主表选择", labels)
 
         file_components = [component for component in _FakeComponent.instances if component.component_type == "File"]
         upload_component = next(component for component in file_components if component.kwargs.get("label") == "数据文件")
-        self.assertIn(".pdf", upload_component.kwargs["file_types"])
-
-        logs_box = next(
-            component
-            for component in _FakeComponent.instances
-            if component.component_type == "Textbox" and component.kwargs.get("label") == "运行事件流"
-        )
-        self.assertEqual(logs_box.kwargs["lines"], 30)
-        self.assertIn("live-log-box", logs_box.kwargs["elem_classes"])
+        self.assertEqual(upload_component.kwargs["file_types"], [".csv", ".xls", ".xlsx"])
 
         button_components = [
             component
             for component in _FakeComponent.instances
             if component.component_type == "Button" and component.click_calls
         ]
-        self.assertGreaterEqual(len(button_components), 3)
-        run_button = next(component for component in button_components if component.args and component.args[0] == "开始分析")
-        preview_button = next(component for component in button_components if component.args and component.args[0] == "预览候选表")
-        self.assertFalse(run_button.click_calls[0][1]["api_name"])
-        self.assertFalse(preview_button.click_calls[0][1]["api_name"])
+        button_labels = [component.args[0] for component in button_components if component.args]
+        self.assertIn("开始分析", button_labels)
+        self.assertIn("刷新历史记录", button_labels)
+        self.assertIn("刷新问答运行列表", button_labels)
+        self.assertIn("开始追问", button_labels)
+        self.assertNotIn("预览候选表", button_labels)
 
-        self.assertEqual(len(upload_component.change_calls), 1)
-        self.assertFalse(upload_component.change_calls[0][1]["api_name"])
+        run_button = next(component for component in button_components if component.args and component.args[0] == "开始分析")
+        history_qa_button = next(component for component in button_components if component.args and component.args[0] == "开始追问")
+        self.assertFalse(run_button.click_calls[0][1]["api_name"])
+        self.assertFalse(history_qa_button.click_calls[0][1]["api_name"])
+
+        quality_mode = next(
+            component
+            for component in _FakeComponent.instances
+            if component.component_type == "Dropdown" and component.kwargs.get("label") == "报告质量档位"
+        )
+        self.assertEqual(len(quality_mode.change_calls), 1)
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Generator
 
 from ..agent_runner import AnalysisRunResult, run_analysis
-from ..document_ingestion import preview_pdf_tables
+from ..history_qa import answer_history_question, index_completed_runs
 from ..memory import derive_memory_scope_key
 from ..reporting import convert_markdown_images_to_gradio_urls
 from .viewmodels import (
@@ -102,99 +102,62 @@ def _error_outputs(message: str, logs: list[str]) -> tuple[object, ...]:
     )
 
 
-def _empty_preview_outputs(message: str) -> tuple[str, list[tuple[str, str]], str | None, str]:
-    summary = (
-        "<section class='overview-card'>"
-        "<h2 class='section-title'>候选表摘要</h2>"
-        f"<p class='section-copy'>{html.escape(message)}</p>"
-        "</section>"
-    )
-    return build_status_markdown(message, level="warning"), [], None, summary
-
-
-def preview_pdf_candidates(
-    uploaded_file: str | None,
-    output_dir: str,
-    session_label: str,
-    max_pdf_pages: float | int,
-    max_candidate_tables: float | int,
-) -> tuple[str, list[tuple[str, str]], str | None, str]:
-    if not uploaded_file:
-        return _empty_preview_outputs("请先上传 PDF 文件，然后再预览候选表。")
-
-    source_path = Path(uploaded_file)
-    if source_path.suffix.lower() != ".pdf":
-        return _empty_preview_outputs("当前文件不是 PDF，无需候选表预览。")
-
-    session_id = build_session_id(f"{session_label or 'pdf-preview'}-preview")
-    uploads_root = Path(output_dir) / "web_uploads"
-    copied_file = copy_uploaded_file(source_path, uploads_root=uploads_root, session_id=session_id)
-    preview = preview_pdf_tables(
-        copied_file,
-        max_pdf_pages=max(1, int(max_pdf_pages)),
-        max_candidate_tables=max(1, int(max_candidate_tables)),
-    )
-
-    if not preview.candidate_tables:
-        warning_text = "；".join(preview.warnings) if preview.warnings else "当前 PDF 未提取到可用结构化表格。"
-        return _empty_preview_outputs(warning_text)
-
-    choices: list[tuple[str, str]] = []
-    rows: list[str] = []
-    for record in preview.candidate_tables:
-        label = (
-            f"{record.table_id} | 第 {record.page_number} 页 | "
-            f"{record.rows}x{record.cols} | 数值列 {len(record.numeric_columns)}"
-        )
-        choices.append((label, record.table_id))
-        default_badge = " <strong>默认主表</strong>" if record.table_id == preview.default_table_id else ""
-        headers = "、".join(record.headers[:6]) if record.headers else "无列头"
-        numeric_cols = "、".join(record.numeric_columns[:6]) if record.numeric_columns else "无"
-        content_hint = html.escape(record.content_hint or "无")
-        rows.append(
-            "<tr>"
-            f"<td>{html.escape(record.table_id)}</td>"
-            f"<td>{record.page_number}</td>"
-            f"<td>{record.rows} x {record.cols}</td>"
-            f"<td>{html.escape(headers)}</td>"
-            f"<td>{html.escape(numeric_cols)}</td>"
-            f"<td>{content_hint}</td>"
-            f"<td>{default_badge or '候选表'}</td>"
-            "</tr>"
-        )
-
-    warnings_html = ""
-    if preview.warnings:
-        warnings_html = (
-            "<div class='empty-panel'>"
-            "<strong>预览提示：</strong>"
-            f"{html.escape('；'.join(preview.warnings))}"
+def _build_history_qa_sources_html(sources: tuple[str, ...], warnings: tuple[str, ...]) -> str:
+    source_items = "".join(f"<li>{html.escape(item)}</li>" for item in sources) or "<li>暂无来源。</li>"
+    warning_html = ""
+    if warnings:
+        warning_items = "".join(f"<li>{html.escape(item)}</li>" for item in warnings)
+        warning_html = (
+            "<div class='review-highlight'>"
+            "<div class='review-status-pill'>提示</div>"
+            f"<div class='review-highlight-body'><ul>{warning_items}</ul></div>"
             "</div>"
         )
-    background_excerpt = preview.background_literature_context[:320].strip()
-    background_html = ""
-    if background_excerpt:
-        background_html = (
-            "<div class='empty-panel'>"
-            "<strong>正文背景摘录：</strong><br>"
-            f"{html.escape(background_excerpt)}"
-            "</div>"
-        )
-    summary = (
+    return (
         "<section class='results-overview'>"
-        "<div class='section-heading'>候选表摘要</div>"
-        "<div class='section-subtitle'>系统会以所选主表做定量分析，并结合其他候选表与文献背景生成综合报告。</div>"
-        "<table class='trace-table compact'>"
-        "<thead><tr><th>table_id</th><th>页码</th><th>形状</th><th>列头摘要</th><th>数值列</th><th>内容提示</th><th>状态</th></tr></thead>"
-        f"<tbody>{''.join(rows)}</tbody></table>"
-        f"{background_html}{warnings_html}"
+        "<div class='section-heading'>历史问答来源</div>"
+        "<div class='section-subtitle'>回答仅基于已完成历史运行的报告、轨迹、审稿记录、图表说明和项目记忆。</div>"
+        f"{warning_html}"
+        "<div class='review-highlight'>"
+        "<div class='review-status-pill'>来源切片</div>"
+        f"<div class='review-highlight-body'><ul>{source_items}</ul></div>"
+        "</div>"
         "</section>"
     )
-    status_text = (
-        f"已提取 {len(preview.candidate_tables)} 张候选表，默认主表为 "
-        f"{preview.default_table_id or '未识别'}。"
+
+
+def load_history_qa_runs(
+    outputs_root: str | Path = "outputs",
+) -> tuple[list[tuple[str, str]], list[str]]:
+    records = index_completed_runs(outputs_root)
+    choices = []
+    defaults: list[str] = []
+    for record in records:
+        label = f"{record.run_id} | {record.detected_domain} | {record.review_status} | {record.timestamp}"
+        choices.append((label, record.run_id))
+    if choices:
+        defaults.append(choices[0][1])
+    return choices, defaults
+
+
+def answer_history_question_ui(
+    question: str,
+    selected_run_ids: list[str] | None,
+    mode: str,
+    output_dir: str,
+    env_file: str,
+) -> tuple[str, str]:
+    normalized_question = str(question or "").strip()
+    if not normalized_question:
+        return "## 历史问答结果\n\n请先输入一个问题。", _build_history_qa_sources_html((), ())
+    result = answer_history_question(
+        normalized_question,
+        run_ids=selected_run_ids or (),
+        mode=mode,
+        outputs_root=output_dir or "outputs",
+        env_file=env_file or None,
     )
-    return build_status_markdown(status_text, level="info"), choices, preview.default_table_id or None, summary
+    return result.answer_markdown, _build_history_qa_sources_html(result.sources, result.warnings)
 
 
 def _running_outputs(status_text: str, logs: list[str]) -> tuple[object, ...]:
@@ -221,7 +184,6 @@ def _result_outputs(
     status_level = "success" if result.workflow_complete else "warning"
     status_text = (
         f"运行完成。质量档位：{result.quality_mode}；"
-        f"文档解析状态：{result.document_ingestion_status}；"
         f"RAG：{result.rag_status}；"
         f"Memory：{result.memory_writeback_status}；"
         f"文本审稿状态：{result.review_status}；"
@@ -258,15 +220,11 @@ def stream_analysis_session(
     query: str,
     quality_mode: str,
     latency_mode: str,
-    document_ingestion_mode: str,
     vision_review_mode: str,
     max_steps: float | int,
     max_reviews: float | int | None,
-    max_pdf_pages: float | int,
-    max_candidate_tables: float | int,
     vision_max_images: float | int,
     vision_max_image_side: float | int,
-    selected_table_id: str | None,
     output_dir: str,
     agent_name: str,
     env_file: str,
@@ -278,7 +236,7 @@ def stream_analysis_session(
 ) -> Generator[tuple[object, ...], None, None]:
     logs: list[str] = []
     if not uploaded_file:
-        yield _error_outputs("请先上传一个 Excel、CSV 或 PDF 数据文件。", logs)
+        yield _error_outputs("请先上传一个 Excel 或 CSV 数据文件。", logs)
         return
 
     session_id = build_session_id(session_label)
@@ -326,10 +284,6 @@ def stream_analysis_session(
                 max_reviews=None if max_reviews in ("", None) else int(max_reviews),
                 quality_mode=quality_mode,
                 latency_mode=latency_mode,
-                document_ingestion_mode=document_ingestion_mode,
-                max_pdf_pages=max(1, int(max_pdf_pages)),
-                max_candidate_tables=max(1, int(max_candidate_tables)),
-                selected_table_id=str(selected_table_id).strip() or None,
                 vision_review_mode=vision_review_mode,
                 vision_max_images=max(1, int(vision_max_images)),
                 vision_max_image_side=max(256, min(int(vision_max_image_side), 2048)),
@@ -386,10 +340,11 @@ def stream_analysis_session(
 
 
 __all__ = [
+    "answer_history_question_ui",
     "copy_uploaded_file",
     "copy_uploaded_knowledge_files",
     "create_run_bundle",
     "default_max_reviews_for_quality",
-    "preview_pdf_candidates",
+    "load_history_qa_runs",
     "stream_analysis_session",
 ]

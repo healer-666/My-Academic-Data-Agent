@@ -7,10 +7,12 @@ import re
 import textwrap
 import unicodedata
 import warnings
+from functools import lru_cache
 from pathlib import Path
 from typing import Iterable, Sequence
 
 
+@lru_cache(maxsize=1)
 def configure_plotting_backend():
     """Configure a non-interactive matplotlib backend and return plotting modules."""
 
@@ -28,6 +30,7 @@ def configure_plotting_backend():
     return plt, sns
 
 
+@lru_cache(maxsize=1)
 def get_plot_font_family() -> str:
     """Return the best available CJK-capable font family for the local machine."""
 
@@ -49,6 +52,7 @@ def get_plot_font_family() -> str:
     return "DejaVu Sans"
 
 
+@lru_cache(maxsize=1)
 def apply_publication_style():
     """Apply a consistent scientific plotting style with Chinese-safe fonts."""
 

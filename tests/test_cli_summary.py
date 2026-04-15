@@ -33,12 +33,10 @@ class CliSummaryTests(unittest.TestCase):
             dtypes="indicator object\n2025-10 float64",
             shape=(13, 2),
             head_markdown="| indicator | 2025-10 |",
-            sample_size_warning="WARNING / 红色警告：当前样本量极小 (N<30)，强烈建议优先考虑非参数检验（如 Mann-Whitney U 检验），并对正态分布假设保持高度谨慎。",
+            sample_size_warning="small sample",
             small_sample_warning=True,
             context_text="demo",
-            input_kind="pdf",
-            background_literature_context="CPI 代表居民消费价格指数。",
-            pdf_multi_table_mode=True,
+            input_kind="tabular",
         )
         return AnalysisRunResult(
             data_context=data_context,
@@ -91,13 +89,10 @@ class CliSummaryTests(unittest.TestCase):
             review_rounds_used=1,
             review_critique="The report is publication-grade.",
             review_log_paths=(logs_dir / "review_round_1_review.json",),
-            input_kind="pdf",
-            document_ingestion_status="completed",
-            document_ingestion_summary="PDF 主表已选定。",
-            document_ingestion_duration_ms=1400,
-            candidate_table_count=2,
-            selected_table_id="table_01",
-            pdf_multi_table_mode=True,
+            input_kind="tabular",
+            document_ingestion_status="not_needed",
+            document_ingestion_summary="输入已是结构化表格，直接进入分析。",
+            latency_mode="auto",
         )
 
     def test_format_search_status(self):
@@ -108,7 +103,7 @@ class CliSummaryTests(unittest.TestCase):
         table = main._build_summary_table(self._build_result())
         rendered = "".join(str(column.header) for column in table.columns)
         self.assertIn("Field", rendered)
-        self.assertEqual(len(table.rows), 28)
+        self.assertEqual(len(table.rows), 23)
 
 
 if __name__ == "__main__":

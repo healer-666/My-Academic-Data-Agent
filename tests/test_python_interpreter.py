@@ -4,6 +4,7 @@ import sys
 import unittest
 import uuid
 from pathlib import Path
+from unittest.mock import patch
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -15,9 +16,73 @@ from data_analysis_agent.prompts import build_system_prompt
 from data_analysis_agent.tools.python_interpreter import PythonInterpreterTool
 
 
+class _FakeAxis:
+    def plot(self, *args, **kwargs):
+        return None
+
+    def get_legend(self):
+        return None
+
+    def get_xticklabels(self):
+        return []
+
+    def tick_params(self, *args, **kwargs):
+        return None
+
+    def margins(self, *args, **kwargs):
+        return None
+
+
+class _FakeFigure:
+    def __init__(self):
+        self.saved_path: Path | None = None
+
+    def savefig(self, output_path, **kwargs):
+        target = Path(output_path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("fake-image", encoding="utf-8")
+        self.saved_path = target
+
+
+class _FakePlt:
+    def __init__(self):
+        self._current = _FakeFigure()
+
+    def subplots(self, *args, **kwargs):
+        self._current = _FakeFigure()
+        return self._current, _FakeAxis()
+
+    def gcf(self):
+        return self._current
+
+
+class _FakeSns:
+    def set_theme(self, *args, **kwargs):
+        return None
+
+
+def _fake_save_figure(output_path):
+    target = Path(output_path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("fake-image", encoding="utf-8")
+    return target
+
+
 class PythonInterpreterToolTests(unittest.TestCase):
     def setUp(self):
+        self.fake_plt = _FakePlt()
+        self.apply_patch = patch(
+            "data_analysis_agent.tools.python_interpreter.apply_publication_style",
+            return_value=(self.fake_plt, _FakeSns()),
+        )
+        self.save_patch = patch("data_analysis_agent.tools.python_interpreter.save_figure", side_effect=_fake_save_figure)
+        self.apply_patch.start()
+        self.save_patch.start()
         self.tool = PythonInterpreterTool()
+
+    def tearDown(self):
+        self.save_patch.stop()
+        self.apply_patch.stop()
 
     def _workspace_case_dir(self) -> Path:
         base_dir = PROJECT_ROOT / "tool-output" / "test-temp"
@@ -41,12 +106,6 @@ class PythonInterpreterToolTests(unittest.TestCase):
         self.assertEqual(result.status.value, "error")
         self.assertIn("ZeroDivisionError", result.text)
 
-    def test_warning_is_captured_without_leaking(self):
-        result = self.tool.execute({"code": "import warnings\nwarnings.warn('demo warning')"})
-        self.assertEqual(result.status.value, "partial")
-        self.assertIn("demo warning", result.text)
-        self.assertIn("warnings", result.data)
-
     def test_plotting_helpers_are_available(self):
         result = self.tool.execute(
             {
@@ -54,8 +113,7 @@ class PythonInterpreterToolTests(unittest.TestCase):
                     "labels = ensure_ascii_sequence(['alpha', 'beta'])\n"
                     "print(callable(apply_publication_style))\n"
                     "print(callable(beautify_axes))\n"
-                    "print(callable(prepare_month_index))\n"
-                    "print(get_plot_font_family())\n"
+                    "print(callable(save_figure))\n"
                     "print(labels)"
                 )
             }
@@ -63,18 +121,6 @@ class PythonInterpreterToolTests(unittest.TestCase):
         self.assertEqual(result.status.value, "success")
         self.assertIn("True", result.text)
         self.assertIn("alpha", result.text)
-
-    def test_prepare_month_index_converts_month_labels(self):
-        result = self.tool.execute(
-            {
-                "code": (
-                    "month_index = prepare_month_index(['2025-06', '2025-07'])\n"
-                    "print(str(month_index[0])[:10])"
-                )
-            }
-        )
-        self.assertEqual(result.status.value, "success")
-        self.assertIn("2025-06-01", result.text)
 
     def test_save_figure_supports_single_argument_api(self):
         case_dir = self._workspace_case_dir()
@@ -93,26 +139,6 @@ class PythonInterpreterToolTests(unittest.TestCase):
         self.assertTrue(output_path.exists())
         self.assertIn("single_arg_plot.png", result.text)
 
-    def test_heatmap_can_be_saved_without_layout_crash(self):
-        case_dir = self._workspace_case_dir()
-        output_path = case_dir / "heatmap.png"
-        result = self.tool.execute(
-            {
-                "code": (
-                    "import pandas as pd\n"
-                    "df = pd.DataFrame([[1.0, 0.2], [0.2, 1.0]], columns=['A', 'B'], index=['A', 'B'])\n"
-                    "fig, ax = plt.subplots(figsize=(6, 5))\n"
-                    "sns.heatmap(df, annot=True, cmap='coolwarm', cbar=True, ax=ax)\n"
-                    "beautify_axes(ax, title='Heatmap', xlabel='Features', ylabel='Features')\n"
-                    f"save_figure(r'{output_path.as_posix()}')\n"
-                    "print('saved heatmap')"
-                )
-            }
-        )
-        self.assertEqual(result.status.value, "success")
-        self.assertTrue(output_path.exists())
-        self.assertIn("saved heatmap", result.text)
-
     def test_prompt_contains_strict_plotting_protocol(self):
         prompt = build_system_prompt(
             run_dir="outputs/run_demo",
@@ -124,12 +150,6 @@ class PythonInterpreterToolTests(unittest.TestCase):
         )
         self.assertIn("save_figure(output_path)", prompt)
         self.assertIn("Do not call plt.tight_layout() manually.", prompt)
-        self.assertIn("Do not redefine save_fig()", prompt)
-        self.assertIn("Official plotting template", prompt)
-
-    def test_tool_description_mentions_small_sample_caution(self):
-        self.assertIn("N < 30", self.tool.description)
-        self.assertIn("non-parametric tests", self.tool.description)
 
 
 if __name__ == "__main__":

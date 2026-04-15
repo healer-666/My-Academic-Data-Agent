@@ -7,7 +7,12 @@ from pathlib import Path
 
 from ..prompts import DEFAULT_QUERY
 from .history import build_history_choices, empty_history_outputs, load_history_record
-from .service import default_max_reviews_for_quality, preview_pdf_candidates, stream_analysis_session
+from .service import (
+    answer_history_question_ui,
+    default_max_reviews_for_quality,
+    load_history_qa_runs,
+    stream_analysis_session,
+)
 
 _GRADIO_IMPORT_ERROR: Exception | None = None
 
@@ -258,36 +263,16 @@ def build_demo():
 
     history_choices, history_default = build_history_choices()
     history_outputs = load_history_record(history_default) if history_default else empty_history_outputs()
+    history_qa_choices, history_qa_default = load_history_qa_runs()
 
     def refresh_history_ui():
         choices, selected = build_history_choices()
         values = load_history_record(selected) if selected else empty_history_outputs()
         return (gradio.update(choices=choices, value=selected), *values)
 
-    def preview_pdf_ui(uploaded_file, output_dir, session_label, max_pdf_pages, max_candidate_tables):
-        status_text, choices, selected, summary_html = preview_pdf_candidates(
-            uploaded_file,
-            output_dir,
-            session_label,
-            max_pdf_pages,
-            max_candidate_tables,
-        )
-        return status_text, gradio.update(choices=choices, value=selected), summary_html
-
-    def auto_preview_pdf_ui(uploaded_file, output_dir, session_label, max_pdf_pages, max_candidate_tables):
-        if not uploaded_file:
-            return (
-                gradio.update(),
-                gradio.update(choices=[], value=None),
-                "<section class='section-shell'><div class='eyebrow'>PDF 主表选择</div><div class='headline'>等待 PDF 文件</div><p class='section-copy'>上传后显示候选表。</p></section>",
-            )
-        if Path(str(uploaded_file)).suffix.lower() != ".pdf":
-            return (
-                gradio.update(),
-                gradio.update(choices=[], value=None),
-                "<section class='section-shell'><div class='eyebrow'>结构化输入</div><div class='headline'>无需主表预览</div><p class='section-copy'>CSV 或 Excel 可直接分析。</p></section>",
-            )
-        return preview_pdf_ui(uploaded_file, output_dir, session_label, max_pdf_pages, max_candidate_tables)
+    def refresh_history_qa_ui(output_dir):
+        choices, defaults = load_history_qa_runs(output_dir or "outputs")
+        return gradio.update(choices=choices, value=defaults)
 
     with gradio.Blocks(title="学术数据智能体交互工作台", theme=theme, css=custom_css) as demo:
         gradio.Markdown(
@@ -316,26 +301,26 @@ def build_demo():
                     <section class="hero-grid page-shell">
                       <section class="hero-shell">
                         <div class="eyebrow">控制台首页</div>
-                        <h1 class="hero-title">面向 <em>学术数据</em> 与 <em>文献 PDF</em> 的分析工作台。</h1>
-                        <p class="hero-copy">上传、分析、审稿、回看。</p>
+                        <h1 class="hero-title">面向 <em>结构化表格数据</em> 的分析与历史问答工作台。</h1>
+                        <p class="hero-copy">上传、分析、审稿、回看、追问。</p>
                         <div class="workflow-list">
-                          <article class="workflow-item"><div class="workflow-kicker">工作流</div><div>上传 → 分析 → 报告 → 审稿</div></article>
-                          <article class="workflow-item"><div class="workflow-kicker">输入</div><div>Excel、CSV、PDF、知识文档</div></article>
+                          <article class="workflow-item"><div class="workflow-kicker">工作流</div><div>上传 → 分析 → 报告 → 审稿 → 历史问答</div></article>
+                          <article class="workflow-item"><div class="workflow-kicker">输入</div><div>Excel、CSV、知识文档</div></article>
                         </div>
                       </section>
                       <section class="hero-shell">
                         <div class="eyebrow">当前能力</div>
                         <div class="summary-list">
                           <article class="summary-item"><div class="summary-kicker">检索层</div><div class="summary-value">混合检索 + 结构化重排</div></article>
-                          <article class="summary-item"><div class="summary-kicker">文档层</div><div class="summary-value">PDF 主表 / 候选表增强</div></article>
+                          <article class="summary-item"><div class="summary-kicker">分析层</div><div class="summary-value">受控分析 + 审稿返修</div></article>
                           <article class="summary-item"><div class="summary-kicker">可信度层</div><div class="summary-value">行内短引用 + Reviewer 校验</div></article>
-                          <article class="summary-item"><div class="summary-kicker">记忆层</div><div class="summary-value">项目级 Memory 回忆与写回</div></article>
+                          <article class="summary-item"><div class="summary-kicker">历史层</div><div class="summary-value">项目级 Memory + 历史问答</div></article>
                         </div>
                       </section>
                     </section>
                     <section class="section-shell page-shell">
                       <div class="eyebrow">导航</div>
-                      <div class="headline">总览 / 发起分析 / 运行结果 / 历史记录</div>
+                      <div class="headline">总览 / 发起分析 / 运行结果 / 历史记录 / 历史问答</div>
                     </section>
                     """
                 )
@@ -358,26 +343,22 @@ def build_demo():
                                 </div>
                                 """
                             )
-                            upload = gradio.File(label="数据文件", type="filepath", file_types=[".csv", ".xls", ".xlsx", ".pdf"])
+                            upload = gradio.File(label="数据文件", type="filepath", file_types=[".csv", ".xls", ".xlsx"])
                             knowledge_uploads = gradio.File(label="知识文档（可选，多文件）", file_count="multiple", file_types=[".txt", ".md", ".pdf"])
                             query = gradio.Textbox(label="分析目标", value=DEFAULT_QUERY, lines=7, placeholder="请描述你希望系统重点回答的问题、关注的指标、报告偏好与输出风格。")
                             with gradio.Row(elem_classes=["form-grid"]):
                                 quality_mode = gradio.Dropdown(label="报告质量档位", choices=[("快速草稿（draft）", "draft"), ("标准分析（standard）", "standard"), ("高标准投稿风格（publication）", "publication")], value="standard")
                                 latency_mode = gradio.Dropdown(label="延迟策略", choices=[("自动平衡（auto）", "auto"), ("质量优先（quality）", "quality"), ("速度优先（fast）", "fast")], value="auto")
                             with gradio.Row(elem_classes=["form-grid"]):
-                                document_ingestion_mode = gradio.Dropdown(label="文档解析模式", choices=[("自动模式", "auto"), ("只走文本解析", "text_only"), ("失败时启用视觉回退", "vision_fallback")], value="auto")
                                 vision_review_mode = gradio.Dropdown(label="视觉审稿", choices=[("关闭", "off"), ("自动", "auto"), ("始终开启", "on")], value="auto")
                             with gradio.Row(elem_classes=["form-grid"]):
                                 use_rag = gradio.Checkbox(label="启用 RAG 检索增强", value=True)
                                 use_memory = gradio.Checkbox(label="启用 Project Memory 回忆", value=True)
-                            selected_table_id = gradio.Dropdown(label="主表选择", choices=[], value=None, interactive=True, allow_custom_value=False)
                             with gradio.Accordion("高级参数", open=False):
                                 with gradio.Row(elem_classes=["control-grid"]):
                                     max_steps = gradio.Slider(label="最大分析步数", minimum=2, maximum=12, step=1, value=6)
                                     max_reviews = gradio.Number(label="最大返修轮次", value=1, precision=0)
-                                    max_pdf_pages = gradio.Slider(label="PDF 最大解析页数", minimum=1, maximum=50, step=1, value=20)
                                 with gradio.Row(elem_classes=["control-grid"]):
-                                    max_candidate_tables = gradio.Slider(label="候选表上限", minimum=1, maximum=12, step=1, value=5)
                                     vision_max_images = gradio.Slider(label="视觉审稿图片数", minimum=1, maximum=6, step=1, value=3)
                                     vision_max_image_side = gradio.Slider(label="视觉图片边长", minimum=512, maximum=2048, step=256, value=1024)
                                 with gradio.Row(elem_classes=["control-grid"]):
@@ -388,7 +369,6 @@ def build_demo():
                                     session_label = gradio.Textbox(label="会话标签", value="", placeholder="用于区分当前任务")
                                     memory_scope_label = gradio.Textbox(label="Memory scope 标签", value="", placeholder="留空则默认复用会话标签或输入文件名")
                             with gradio.Row(elem_classes=["button-grid"]):
-                                preview_pdf_button = gradio.Button("预览候选表", variant="secondary")
                                 run_button = gradio.Button("开始分析", variant="primary")
 
                     with gradio.Column(scale=1, min_width=320):
@@ -399,14 +379,14 @@ def build_demo():
                               <div class="headline">历史与导航</div>
                               <p class="rail-copy">只保留当前任务最常用的提醒。</p>
                               <div class="rail-list">
-                                <article class="rail-item"><div class="rail-kicker">PDF</div><div>先预览候选表。</div></article>
+                                <article class="rail-item"><div class="rail-kicker">输入</div><div>仅支持结构化表格数据主线。</div></article>
                                 <article class="rail-item"><div class="rail-kicker">连续项目</div><div>建议开启 Project Memory。</div></article>
-                                <article class="rail-item"><div class="rail-kicker">可信度</div><div>建议保留 RAG 和审稿。</div></article>
+                                <article class="rail-item"><div class="rail-kicker">追问</div><div>完成分析后可到历史问答页继续提问。</div></article>
                               </div>
                             </section>
                             """
                         )
-                        pdf_candidate_summary = gradio.HTML("<section class='section-shell'><div class='eyebrow'>PDF 主表选择</div><div class='headline'>等待预览</div><p class='section-copy'>上传 PDF 后显示候选表。</p></section>")
+                        input_summary = gradio.HTML("<section class='section-shell'><div class='eyebrow'>数据入口</div><div class='headline'>结构化表格主线</div><p class='section-copy'>上传 CSV 或 Excel 后即可直接进入分析。</p></section>")
 
             with gradio.Tab("运行结果"):
                 with gradio.Row(elem_classes=["monitor-grid", "page-shell"]):
@@ -463,18 +443,64 @@ def build_demo():
                                     history_trace_file = gradio.File(label="下载 agent_trace.json", value=history_outputs[5])
                                     history_cleaned_file = gradio.File(label="下载 cleaned_data.csv", value=history_outputs[6])
 
+            with gradio.Tab("历史问答"):
+                with gradio.Row(elem_classes=["history-grid", "page-shell"]):
+                    with gradio.Column(scale=1, min_width=320):
+                        gradio.Markdown(
+                            """
+                            <section class="history-shell">
+                              <div class="eyebrow">历史智能体</div>
+                              <div class="headline">对历史分析结果继续追问</div>
+                              <p class="rail-copy">围绕已完成运行，解释结论、方法、图表、审稿意见和来源。</p>
+                              <div class="history-tip">支持单次追问和多次运行对比。</div>
+                            </section>
+                            """
+                        )
+                        with gradio.Group(elem_classes=["history-shell"]):
+                            refresh_history_qa_button = gradio.Button("刷新问答运行列表", variant="secondary")
+                            history_qa_run_ids = gradio.Dropdown(
+                                label="问答运行范围",
+                                choices=history_qa_choices,
+                                value=history_qa_default,
+                                multiselect=True,
+                                interactive=True,
+                            )
+                            history_qa_mode = gradio.Dropdown(
+                                label="问答模式",
+                                choices=[("单次追问", "single"), ("跨运行对比", "compare")],
+                                value="single",
+                            )
+                    with gradio.Column(scale=3, min_width=820):
+                        with gradio.Group(elem_classes=["history-shell"]):
+                            history_qa_question = gradio.Textbox(
+                                label="问题",
+                                lines=6,
+                                placeholder="例如：上次为什么使用非参数检验？哪次报告被审稿拒绝，原因是什么？",
+                            )
+                            history_qa_button = gradio.Button("开始追问", variant="primary")
+                            history_qa_answer = gradio.Markdown("## 历史问答结果\n\n等待提问。")
+                            history_qa_sources = gradio.HTML(
+                                "<section class='results-overview'><div class='section-heading'>历史问答来源</div><div class='empty-panel'>提交问题后显示来源切片。</div></section>"
+                            )
+
         quality_mode.change(fn=default_max_reviews_for_quality, inputs=quality_mode, outputs=max_reviews, api_name=False, show_api=False)
-        upload.change(fn=auto_preview_pdf_ui, inputs=[upload, output_dir, session_label, max_pdf_pages, max_candidate_tables], outputs=[status, selected_table_id, pdf_candidate_summary], api_name=False, show_api=False)
-        preview_pdf_button.click(fn=preview_pdf_ui, inputs=[upload, output_dir, session_label, max_pdf_pages, max_candidate_tables], outputs=[status, selected_table_id, pdf_candidate_summary], api_name=False, show_api=False)
         run_button.click(
             fn=stream_analysis_session,
-            inputs=[upload, query, quality_mode, latency_mode, document_ingestion_mode, vision_review_mode, max_steps, max_reviews, max_pdf_pages, max_candidate_tables, vision_max_images, vision_max_image_side, selected_table_id, output_dir, agent_name, env_file, session_label, knowledge_uploads, use_rag, use_memory, memory_scope_label],
+            inputs=[upload, query, quality_mode, latency_mode, vision_review_mode, max_steps, max_reviews, vision_max_images, vision_max_image_side, output_dir, agent_name, env_file, session_label, knowledge_uploads, use_rag, use_memory, memory_scope_label],
             outputs=[status, logs, overview, summary, report, gallery, review, diagnostics, report_file, trace_file, bundle_file],
             api_name=False,
             show_api=False,
         )
         refresh_history_button.click(fn=refresh_history_ui, inputs=[], outputs=[history_selector, history_overview, history_report, history_gallery, history_diagnostics, history_report_file, history_trace_file, history_cleaned_file], api_name=False, show_api=False)
         history_selector.change(fn=load_history_record, inputs=history_selector, outputs=[history_overview, history_report, history_gallery, history_diagnostics, history_report_file, history_trace_file, history_cleaned_file], api_name=False, show_api=False)
+        refresh_history_qa_button.click(fn=refresh_history_qa_ui, inputs=[output_dir], outputs=[history_qa_run_ids], api_name=False, show_api=False)
+        history_qa_button.click(
+            fn=answer_history_question_ui,
+            inputs=[history_qa_question, history_qa_run_ids, history_qa_mode, output_dir, env_file],
+            outputs=[history_qa_answer, history_qa_sources],
+            api_name=False,
+            show_api=False,
+        )
     demo.queue()
     return demo
 
