@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import html
+import json
 import queue
 import shutil
 import threading
 import traceback
+from datetime import datetime
 from pathlib import Path
 from typing import Generator
 
@@ -14,6 +16,7 @@ from ..agent_runner import AnalysisRunResult, run_analysis
 from ..history_qa import answer_history_question, index_completed_runs
 from ..memory import derive_memory_scope_key
 from ..reporting import convert_markdown_images_to_gradio_urls
+from .history import build_history_choices, empty_history_outputs, load_history_record
 from .viewmodels import (
     build_download_paths,
     build_gallery_items,
@@ -26,6 +29,8 @@ from .viewmodels import (
     default_max_reviews_for_quality,
     format_event_line,
 )
+
+_DEFAULT_KNOWLEDGE_BASE_DIR = Path("memory") / "knowledge_base"
 
 
 def copy_uploaded_file(uploaded_file: str | Path, *, uploads_root: str | Path, session_id: str) -> Path:
@@ -86,7 +91,112 @@ def _empty_overview(title: str, body: str) -> str:
     )
 
 
-def _error_outputs(message: str, logs: list[str]) -> tuple[object, ...]:
+def _gradio_update(**kwargs):
+    try:  # pragma: no cover - exercised through Gradio at runtime
+        import gradio as gr
+
+        return gr.update(**kwargs)
+    except Exception:
+        return kwargs
+
+
+def _resolve_knowledge_base_dir(knowledge_base_dir: str | Path | None = None) -> Path:
+    return Path(knowledge_base_dir or _DEFAULT_KNOWLEDGE_BASE_DIR).resolve()
+
+
+def _format_timestamp(timestamp: float) -> str:
+    try:
+        return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return "未知时间"
+
+
+def load_knowledge_base_status(knowledge_base_dir: str | Path | None = None) -> str:
+    resolved_dir = _resolve_knowledge_base_dir(knowledge_base_dir)
+    files_dir = resolved_dir / "files"
+    keyword_index_path = resolved_dir / "keyword_index.json"
+    chroma_dir = resolved_dir / "chroma"
+
+    indexed_files = sorted(
+        [path for path in files_dir.glob("*") if path.is_file()],
+        key=lambda item: item.stat().st_mtime,
+        reverse=True,
+    )
+    chunk_count = 0
+    if keyword_index_path.exists():
+        try:
+            payload = json.loads(keyword_index_path.read_text(encoding="utf-8"))
+        except Exception:
+            payload = {}
+        if isinstance(payload, dict):
+            chunk_values = payload.get("chunks", [])
+            if isinstance(chunk_values, list):
+                chunk_count = len(chunk_values)
+
+    vector_status = "已建立"
+    if not chroma_dir.exists() or not any(chroma_dir.rglob("*")):
+        vector_status = "尚未建立"
+
+    latest_file_items = "".join(
+        "<li>"
+        f"{html.escape(path.name)}"
+        f"<span class='inline-muted'> · {_format_timestamp(path.stat().st_mtime)}</span>"
+        "</li>"
+        for path in indexed_files[:6]
+    )
+    if not latest_file_items:
+        latest_file_items = "<li>当前还没有长期收录的参考资料。</li>"
+
+    return (
+        "<section class='section-shell'>"
+        "<div class='eyebrow'>参考资料知识库</div>"
+        "<div class='headline'>知识库状态 / 已收录文档</div>"
+        "<p class='section-copy'>上传到这里的参考资料会沉淀到本地知识库，后续分析也可以继续检索使用。</p>"
+        "<div class='metric-grid'>"
+        "<article class='metric-card'>"
+        "<div class='metric-label'>已收录文档</div>"
+        f"<div class='metric-value'>{len(indexed_files)}</div>"
+        "</article>"
+        "<article class='metric-card'>"
+        "<div class='metric-label'>知识切片</div>"
+        f"<div class='metric-value'>{chunk_count}</div>"
+        "</article>"
+        "<article class='metric-card'>"
+        "<div class='metric-label'>向量索引</div>"
+        f"<div class='metric-value'>{html.escape(vector_status)}</div>"
+        "</article>"
+        "<article class='metric-card'>"
+        "<div class='metric-label'>知识库位置</div>"
+        f"<div class='metric-value'>{html.escape(resolved_dir.as_posix())}</div>"
+        "</article>"
+        "</div>"
+        "<div class='review-highlight'>"
+        "<div class='review-status-pill'>最近收录</div>"
+        f"<div class='review-highlight-body'><ul>{latest_file_items}</ul></div>"
+        "</div>"
+        "</section>"
+    )
+
+
+def load_workspace_browser_state(
+    output_dir: str | Path = "outputs",
+) -> tuple[object, ...]:
+    history_choices, history_default = build_history_choices(output_dir)
+    history_outputs = (
+        load_history_record(history_default, outputs_root=output_dir)
+        if history_default
+        else empty_history_outputs()
+    )
+    history_qa_choices, history_qa_default = load_history_qa_runs(output_dir)
+    return (
+        _gradio_update(choices=history_choices, value=history_default),
+        *history_outputs,
+        _gradio_update(choices=history_qa_choices, value=history_qa_default),
+        load_knowledge_base_status(),
+    )
+
+
+def _error_outputs(message: str, logs: list[str], *, output_dir: str | Path = "outputs") -> tuple[object, ...]:
     return (
         build_status_markdown(message, level="error"),
         "\n\n".join(logs),
@@ -99,6 +209,7 @@ def _error_outputs(message: str, logs: list[str]) -> tuple[object, ...]:
         None,
         None,
         None,
+        *load_workspace_browser_state(output_dir),
     )
 
 
@@ -184,8 +295,8 @@ def _result_outputs(
     status_level = "success" if result.workflow_complete else "warning"
     status_text = (
         f"运行完成。质量档位：{result.quality_mode}；"
-        f"RAG：{result.rag_status}；"
-        f"Memory：{result.memory_writeback_status}；"
+        f"参考资料：{result.rag_status}；"
+        f"历史经验：{result.memory_writeback_status}；"
         f"文本审稿状态：{result.review_status}；"
         f"视觉审稿状态：{result.vision_review_status}；"
         f"返修轮次：{result.review_rounds_used}。"
@@ -212,6 +323,7 @@ def _result_outputs(
         report_download,
         trace_download,
         bundle_download,
+        *load_workspace_browser_state(result.run_dir.parent),
     )
 
 
@@ -236,7 +348,7 @@ def stream_analysis_session(
 ) -> Generator[tuple[object, ...], None, None]:
     logs: list[str] = []
     if not uploaded_file:
-        yield _error_outputs("请先上传一个 Excel 或 CSV 数据文件。", logs)
+        yield _error_outputs("请先上传一个 Excel 或 CSV 数据文件。", logs, output_dir=output_dir)
         return
 
     session_id = build_session_id(session_label)
@@ -248,7 +360,7 @@ def stream_analysis_session(
     try:
         copied_file = copy_uploaded_file(uploaded_file, uploads_root=uploads_root, session_id=session_id)
     except Exception as exc:
-        yield _error_outputs(f"上传文件处理失败：{exc}", logs)
+        yield _error_outputs(f"上传文件处理失败：{exc}", logs, output_dir=output_dir)
         return
 
     logs.append(f"上传文件已复制到：{copied_file.as_posix()}")
@@ -261,11 +373,11 @@ def stream_analysis_session(
                 session_id=session_id,
             )
         except Exception as exc:
-            yield _error_outputs(f"知识文件处理失败：{exc}", logs)
+            yield _error_outputs(f"参考资料处理失败：{exc}", logs, output_dir=output_dir)
             return
         if copied_knowledge_files:
-            logs.append(f"知识文件已准备：{len(copied_knowledge_files)} 个")
-    yield _running_outputs("文件已接收，正在启动分析任务。", logs)
+            logs.append(f"参考资料已准备并会沉淀到知识库：{len(copied_knowledge_files)} 个")
+    yield (*_running_outputs("文件已接收，正在启动分析任务。", logs), *load_workspace_browser_state(output_dir))
 
     event_queue: queue.Queue[tuple[str, object]] = queue.Queue()
 
@@ -320,14 +432,14 @@ def stream_analysis_session(
         if kind == "event":
             event_type, event_payload = payload
             logs.append(format_event_line(event_type, event_payload))
-            yield _running_outputs(f"任务运行中：{event_type}", logs)
+            yield (*_running_outputs(f"任务运行中：{event_type}", logs), *load_workspace_browser_state(output_dir))
             continue
 
         if kind == "error":
             error_payload = payload
             logs.append(f"执行失败：{error_payload['message']}")
             logs.append(error_payload["traceback"])
-            yield _error_outputs(f"分析失败：{error_payload['message']}", logs)
+            yield _error_outputs(f"分析失败：{error_payload['message']}", logs, output_dir=output_dir)
             finished = True
             continue
 
@@ -345,6 +457,8 @@ __all__ = [
     "copy_uploaded_knowledge_files",
     "create_run_bundle",
     "default_max_reviews_for_quality",
+    "load_knowledge_base_status",
     "load_history_qa_runs",
+    "load_workspace_browser_state",
     "stream_analysis_session",
 ]

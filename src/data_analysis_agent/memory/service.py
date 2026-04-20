@@ -1,4 +1,4 @@
-"""Project-scoped memory retrieval and writeback service."""
+"""Success and failure memory retrieval/writeback services."""
 
 from __future__ import annotations
 
@@ -8,10 +8,16 @@ from typing import Iterable
 
 from ..config import RuntimeConfig
 from ..rag.embeddings import OpenAIEmbeddingClient
-from .models import MemoryRecord, MemoryRetrievalResult, MemoryWriteResult
+from .models import (
+    FailureMemoryRecord,
+    FailureMemoryRetrievalResult,
+    FailureMemoryWriteResult,
+    MemoryRecord,
+    MemoryRetrievalResult,
+    MemoryWriteResult,
+)
 
-
-class ProjectMemoryService:
+class SuccessMemoryService:
     COLLECTION_NAME = "academic_data_agent_project_memory"
 
     def __init__(
@@ -42,7 +48,7 @@ class ProjectMemoryService:
         if not normalized_scope_key:
             return MemoryRetrievalResult(status="skipped")
 
-        query = self.build_query(user_query=user_query, data_context=data_context)
+        query = build_memory_query(user_query=user_query, data_context=data_context)
         if not query:
             return MemoryRetrievalResult(status="skipped", memory_scope_key=normalized_scope_key)
 
@@ -132,16 +138,7 @@ class ProjectMemoryService:
         return "\n".join(lines).strip()
 
     def build_query(self, *, user_query: str, data_context) -> str:
-        parts = [
-            str(user_query or "").strip(),
-            ", ".join(getattr(data_context, "columns", [])[:8]),
-            ", ".join(getattr(data_context, "selected_table_headers", ())[:6]),
-            ", ".join(getattr(data_context, "selected_table_numeric_columns", ())[:6]),
-            str(getattr(data_context, "background_literature_context", "") or "")[:220],
-            str(getattr(data_context, "selected_table_id", "") or "").strip(),
-        ]
-        normalized = " | ".join(part for part in parts if part)
-        return " ".join(normalized.split()).strip()
+        return build_memory_query(user_query=user_query, data_context=data_context)
 
     def _get_collection(self):
         try:
@@ -151,6 +148,157 @@ class ProjectMemoryService:
         self.chroma_dir.mkdir(parents=True, exist_ok=True)
         client = chromadb.PersistentClient(path=str(self.chroma_dir))
         return client.get_or_create_collection(name=self.COLLECTION_NAME)
+
+
+class FailureMemoryService:
+    COLLECTION_NAME = "academic_data_agent_failure_memory"
+
+    def __init__(
+        self,
+        *,
+        runtime_config: RuntimeConfig,
+        memory_base_dir: str | Path | None = None,
+    ) -> None:
+        self.runtime_config = runtime_config
+        self.memory_base_dir = Path(memory_base_dir or Path("memory") / "failure_memory").resolve()
+        self.chroma_dir = self.memory_base_dir / "chroma"
+        self.embedding_client = OpenAIEmbeddingClient(
+            model_id=runtime_config.embedding_model_id or "",
+            api_key=runtime_config.embedding_api_key or "",
+            base_url=runtime_config.embedding_base_url or "",
+            timeout=runtime_config.embedding_timeout,
+        )
+
+    def retrieve(
+        self,
+        *,
+        memory_scope_key: str,
+        user_query: str,
+        data_context,
+        top_k: int = 4,
+    ) -> FailureMemoryRetrievalResult:
+        normalized_scope_key = str(memory_scope_key or "").strip()
+        if not normalized_scope_key:
+            return FailureMemoryRetrievalResult(status="skipped")
+
+        query = build_memory_query(user_query=user_query, data_context=data_context)
+        if not query:
+            return FailureMemoryRetrievalResult(status="skipped", memory_scope_key=normalized_scope_key)
+
+        collection = self._get_collection()
+        try:
+            existing = collection.get(where={"memory_scope_key": normalized_scope_key}, include=[])
+            ids = existing.get("ids", []) if isinstance(existing, dict) else []
+            if not ids:
+                return FailureMemoryRetrievalResult(
+                    status="empty",
+                    memory_scope_key=normalized_scope_key,
+                    retrieval_query=query,
+                )
+            embeddings = self.embedding_client.embed_texts([query])
+            query_embedding = embeddings[0] if embeddings else []
+            if not query_embedding:
+                return FailureMemoryRetrievalResult(
+                    status="skipped",
+                    memory_scope_key=normalized_scope_key,
+                    retrieval_query=query,
+                )
+            payload = collection.query(
+                query_embeddings=[query_embedding],
+                n_results=max(1, int(top_k)),
+                where={"memory_scope_key": normalized_scope_key},
+                include=["documents", "metadatas"],
+            )
+        except Exception as exc:
+            return FailureMemoryRetrievalResult(
+                status="failed",
+                memory_scope_key=normalized_scope_key,
+                retrieval_query=query,
+                warnings=(str(exc),),
+            )
+
+        records = _parse_retrieved_failure_records(payload)
+        return FailureMemoryRetrievalResult(
+            status="retrieved" if records else "empty",
+            memory_scope_key=normalized_scope_key,
+            retrieval_query=query,
+            records=records,
+        )
+
+    def write_records(
+        self,
+        *,
+        records: Iterable[FailureMemoryRecord],
+        run_id: str,
+    ) -> FailureMemoryWriteResult:
+        record_list = tuple(records)
+        if not record_list:
+            return FailureMemoryWriteResult(status="empty")
+        collection = self._get_collection()
+        try:
+            existing = collection.get(where={"run_id": str(run_id)}, include=[])
+            ids = existing.get("ids", []) if isinstance(existing, dict) else []
+            if ids:
+                return FailureMemoryWriteResult(status="already_written")
+            embeddings = self.embedding_client.embed_texts(record.text for record in record_list)
+            if len(embeddings) != len(record_list):
+                raise ValueError("Failure-memory embedding response count mismatch.")
+            collection.upsert(
+                ids=[record.memory_id for record in record_list],
+                documents=[record.text for record in record_list],
+                metadatas=[record.to_metadata() for record in record_list],
+                embeddings=embeddings,
+            )
+        except Exception as exc:
+            return FailureMemoryWriteResult(status="failed", warnings=(str(exc),))
+        return FailureMemoryWriteResult(status="written", written_records=record_list)
+
+    def format_for_prompt(self, records: Iterable[FailureMemoryRecord], *, max_chars: int = 2200) -> str:
+        lines: list[str] = []
+        total_chars = 0
+        for record in records:
+            line = (
+                f"[{record.failure_type} | run={record.run_id} | stage={record.trigger_stage}] "
+                f"AVOID: {record.text} Checklist: {record.avoidance_rule}"
+            )
+            remaining = max_chars - total_chars
+            if remaining <= 0:
+                break
+            if len(line) > remaining:
+                line = line[:remaining].rstrip() + " ..."
+            lines.append(line)
+            total_chars += len(line)
+            if total_chars >= max_chars:
+                break
+        return "\n".join(lines).strip()
+
+    def build_query(self, *, user_query: str, data_context) -> str:
+        return build_memory_query(user_query=user_query, data_context=data_context)
+
+    def _get_collection(self):
+        try:
+            import chromadb
+        except Exception as exc:
+            raise RuntimeError(f"chromadb is unavailable: {exc}") from exc
+        self.chroma_dir.mkdir(parents=True, exist_ok=True)
+        client = chromadb.PersistentClient(path=str(self.chroma_dir))
+        return client.get_or_create_collection(name=self.COLLECTION_NAME)
+
+
+ProjectMemoryService = SuccessMemoryService
+
+
+def build_memory_query(*, user_query: str, data_context) -> str:
+    parts = [
+        str(user_query or "").strip(),
+        ", ".join(getattr(data_context, "columns", [])[:8]),
+        ", ".join(getattr(data_context, "selected_table_headers", ())[:6]),
+        ", ".join(getattr(data_context, "selected_table_numeric_columns", ())[:6]),
+        str(getattr(data_context, "background_literature_context", "") or "")[:220],
+        str(getattr(data_context, "selected_table_id", "") or "").strip(),
+    ]
+    normalized = " | ".join(part for part in parts if part)
+    return " ".join(normalized.split()).strip()
 
 
 def _parse_retrieved_records(payload: dict[str, object]) -> tuple[MemoryRecord, ...]:
@@ -175,6 +323,39 @@ def _parse_retrieved_records(payload: dict[str, object]) -> tuple[MemoryRecord, 
                 review_status=str(metadata.get("review_status", "") or "accepted"),
                 text=str(document or ""),
                 source_names=_coerce_str_tuple(metadata.get("source_names")),
+                usage_mode=str(metadata.get("usage_mode", "") or "positive"),
+            )
+        )
+    return tuple(records)
+
+
+def _parse_retrieved_failure_records(payload: dict[str, object]) -> tuple[FailureMemoryRecord, ...]:
+    documents = payload.get("documents", [[]]) if isinstance(payload, dict) else [[]]
+    metadatas = payload.get("metadatas", [[]]) if isinstance(payload, dict) else [[]]
+    records: list[FailureMemoryRecord] = []
+    for index, document in enumerate(documents[0] if documents else []):
+        metadata = (metadatas[0] if metadatas else [])[index] if metadatas else {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        records.append(
+            FailureMemoryRecord(
+                memory_id=str(metadata.get("memory_id", "") or ""),
+                memory_scope_key=str(metadata.get("memory_scope_key", "") or ""),
+                failure_type=str(metadata.get("failure_type", "") or "failure_constraint"),
+                run_id=str(metadata.get("run_id", "") or ""),
+                source_report_path=str(metadata.get("source_report_path", "") or ""),
+                source_trace_path=str(metadata.get("source_trace_path", "") or ""),
+                detected_domain=str(metadata.get("detected_domain", "") or "unknown"),
+                quality_mode=str(metadata.get("quality_mode", "") or "standard"),
+                created_at=str(metadata.get("created_at", "") or ""),
+                review_status=str(metadata.get("review_status", "") or "unknown"),
+                workflow_complete=bool(metadata.get("workflow_complete", False)),
+                execution_audit_status=str(metadata.get("execution_audit_status", "") or "not_checked"),
+                trigger_stage=str(metadata.get("trigger_stage", "") or "analysis"),
+                text=str(document or ""),
+                avoidance_rule=str(metadata.get("avoidance_rule", "") or ""),
+                source_names=_coerce_str_tuple(metadata.get("source_names")),
+                usage_mode=str(metadata.get("usage_mode", "") or "negative"),
             )
         )
     return tuple(records)

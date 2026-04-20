@@ -16,6 +16,7 @@ from .runtime_models import (
     ParsedReviewerReply,
     ReviewerEvidenceFinding,
     ReviewRecord,
+    StageExecutionAuditResult,
     VisualReviewRecord,
 )
 from .vision_review import VisualReviewResult
@@ -126,6 +127,7 @@ def build_reviewer_task(
     evidence_register: tuple[RetrievedChunk, ...] = (),
     evidence_coverage: EvidenceCoverage | None = None,
     memory_context: str = "",
+    execution_audit: StageExecutionAuditResult | None = None,
 ) -> str:
     trace_lines = []
     for trace in step_traces:
@@ -171,6 +173,15 @@ def build_reviewer_task(
         else "- none"
     )
     memory_block = memory_context.strip() or "- none"
+    active_execution_audit = execution_audit or StageExecutionAuditResult(status="not_checked")
+    audit_findings = (
+        "\n".join(
+            f"- step={finding.step_index if finding.step_index is not None else 'n/a'} | {finding.message}"
+            for finding in active_execution_audit.findings
+        )
+        if active_execution_audit.findings
+        else "- none"
+    )
 
     return (
         f"Review round: {review_round}\n"
@@ -205,6 +216,15 @@ def build_reviewer_task(
         f"{uncited_sections}\n\n"
         "Project memory context:\n"
         f"{memory_block}\n\n"
+        "Stage execution audit:\n"
+        f"- status: {active_execution_audit.status}\n"
+        f"- passed: {active_execution_audit.passed}\n"
+        f"- stage1_save_detected: {active_execution_audit.stage1_save_detected}\n"
+        f"- stage2_cleaned_reload_detected: {active_execution_audit.stage2_cleaned_reload_detected}\n"
+        f"- raw_data_reused_after_stage1: {active_execution_audit.raw_data_reused_after_stage1}\n"
+        f"- evidence_step_indices: {', '.join(str(item) for item in active_execution_audit.evidence_step_indices) if active_execution_audit.evidence_step_indices else 'none'}\n"
+        "Stage audit findings:\n"
+        f"{audit_findings}\n\n"
         + (
             "Visual figure audit summary:\n"
             f"{visual_review_summary}\n\n"
@@ -219,6 +239,29 @@ def build_reviewer_task(
             "Candidate final_report.md content:\n"
             f"{report_markdown}"
         )
+    )
+
+
+def build_stage_audit_rejection(audit_result: StageExecutionAuditResult) -> ParsedReviewerReply:
+    findings = [finding.message for finding in audit_result.findings]
+    critique = (
+        "阶段执行审计未通过："
+        f"status={audit_result.status}；"
+        "系统未能证明该轮分析遵守“先保存 cleaned_data.csv，再在后续 Python 步骤中重读并分析”的两阶段契约。"
+    )
+    if findings:
+        critique = critique + " 具体问题：" + " | ".join(findings)
+    payload = {
+        "decision": "Reject",
+        "critique": critique,
+        "source": "stage_execution_audit",
+        "stage_execution_audit_status": audit_result.status,
+        "stage_execution_audit_findings": findings,
+    }
+    return ParsedReviewerReply(
+        decision="Reject",
+        critique=critique,
+        raw_response=json.dumps(payload, ensure_ascii=False),
     )
 
 

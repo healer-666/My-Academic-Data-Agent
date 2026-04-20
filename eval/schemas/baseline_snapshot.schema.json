@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BaselineSnapshot",
+  "type": "object",
+  "required": [
+    "baseline_name",
+    "created_at",
+    "task_count",
+    "accept_rate",
+    "workflow_complete_rate",
+    "execution_audit_pass_rate",
+    "review_reject_rate",
+    "avg_step_count",
+    "avg_duration_seconds",
+    "failure_type_distribution",
+    "task_results"
+  ],
+  "additionalProperties": true
+}

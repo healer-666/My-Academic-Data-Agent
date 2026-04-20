@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TaskSpec",
+  "type": "object",
+  "required": ["task_id", "title", "data_path", "question", "task_type"],
+  "properties": {
+    "task_id": {"type": "string"},
+    "title": {"type": "string"},
+    "data_path": {"type": "string"},
+    "question": {"type": "string"},
+    "task_type": {"type": "string"},
+    "quality_mode": {"type": "string"},
+    "latency_mode": {"type": "string"},
+    "use_rag": {"type": "boolean"},
+    "use_memory": {"type": "boolean"},
+    "memory_scope_key": {"type": "string"},
+    "expected_methods": {"type": "array", "items": {"type": "string"}},
+    "key_checks": {"type": "array", "items": {"type": "string"}},
+    "manual_expectations": {"type": "array", "items": {"type": "string"}},
+    "common_failures": {"type": "array", "items": {"type": "string"}},
+    "notes": {"type": "string"}
+  },
+  "additionalProperties": true
+}

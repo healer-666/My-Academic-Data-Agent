@@ -38,6 +38,9 @@ class RunHistoryEntry:
     vision_review_status: str
     vision_review_summary: str
     workflow_complete: bool
+    stage_contract_status: str
+    stage_contract_findings: tuple[str, ...]
+    stage_contract_passed: bool
     domain: str
     report_path: Path | None
     trace_path: Path | None
@@ -178,6 +181,15 @@ def _build_history_entry(run_dir: Path) -> RunHistoryEntry:
         vision_review_status=vision_status,
         vision_review_summary=vision_summary,
         workflow_complete=bool(artifact_validation.get("workflow_complete", False)),
+        stage_contract_status=str(artifact_validation.get("stage_contract_status", "not_checked")).strip() or "not_checked",
+        stage_contract_findings=tuple(
+            str(item).strip()
+            for item in artifact_validation.get("stage_contract_findings", [])
+            if str(item).strip()
+        )
+        if isinstance(artifact_validation.get("stage_contract_findings", []), list)
+        else (),
+        stage_contract_passed=bool(artifact_validation.get("stage_contract_passed", False)),
         domain=str(telemetry.get("domain", "unknown")).strip() or "unknown",
         report_path=report_path.resolve() if report_path.exists() else None,
         trace_path=trace_path.resolve() if trace_path.exists() else None,
@@ -213,9 +225,12 @@ def build_history_choices(outputs_root: str | Path = "outputs") -> tuple[list[tu
 
 
 def _build_history_overview_html(entry: RunHistoryEntry) -> str:
-    memory_payload = entry.trace_payload.get("memory", {})
+    memory_payload = entry.trace_payload.get("success_memory", entry.trace_payload.get("memory", {}))
     if not isinstance(memory_payload, dict):
         memory_payload = {}
+    failure_memory_payload = entry.trace_payload.get("failure_memory", {})
+    if not isinstance(failure_memory_payload, dict):
+        failure_memory_payload = {}
     table_shape = (
         f"{entry.selected_table_shape[0]} x {entry.selected_table_shape[1]}"
         if entry.selected_table_shape
@@ -226,6 +241,7 @@ def _build_history_overview_html(entry: RunHistoryEntry) -> str:
         ("领域", entry.domain),
         ("输入", input_kind_label(entry.input_kind)),
         ("质量", quality_mode_label(entry.quality_mode)),
+        ("阶段审计", "已通过" if entry.stage_contract_passed else entry.stage_contract_status),
         ("文本审稿", review_status_label(entry.review_status)),
         ("工作流", workflow_status_label(entry.workflow_complete)),
     ]
@@ -267,10 +283,18 @@ def _build_history_overview_html(entry: RunHistoryEntry) -> str:
     )
     memory_block = (
         "<div class='review-highlight'>"
-        "<div class='review-status-pill'>Project Memory</div>"
+        "<div class='review-status-pill'>历史经验</div>"
         f"<div class='review-highlight-body'>状态：{'启用' if bool(memory_payload.get('enabled', False)) else '关闭'}<br>"
-        f"Scope：{_escape(memory_payload.get('scope_key', 'N/A'))}<br>"
+        f"分组：{_escape(memory_payload.get('scope_key', 'N/A'))}<br>"
         f"命中：{_escape(len(memory_payload.get('retrieved_records', [])) if isinstance(memory_payload.get('retrieved_records'), list) else 0)} 条</div>"
+        "</div>"
+    )
+    audit_findings = "<br>".join(_escape(item) for item in entry.stage_contract_findings) or "未记录阶段审计问题。"
+    audit_block = (
+        "<div class='review-highlight'>"
+        "<div class='review-status-pill'>阶段审计</div>"
+        f"<div class='review-highlight-body'>状态：{_escape('已通过' if entry.stage_contract_passed else entry.stage_contract_status)}<br>"
+        f"{audit_findings}</div>"
         "</div>"
     )
 
@@ -280,6 +304,7 @@ def _build_history_overview_html(entry: RunHistoryEntry) -> str:
         f"<div class='section-subtitle'>{_escape(entry.run_dir.name)}</div>"
         f"{ingestion_block}"
         f"<div class='metric-grid'>{card_html}</div>"
+        f"{audit_block}"
         f"{memory_block}"
         f"{visual_block}"
         "</section>"
@@ -324,10 +349,19 @@ def _build_history_trace_html(entry: RunHistoryEntry) -> str:
     if memory_payload:
         extra_rows.append(
             "<tr>"
-            "<td>Project Memory</td>"
-            f"<td colspan='2'>scope={_escape(memory_payload.get('scope_key', 'N/A'))} | "
-            f"retrieval={_escape(memory_payload.get('retrieval_status', 'unknown'))} | "
-            f"writeback={_escape(memory_payload.get('writeback_status', 'unknown'))}</td>"
+            "<td>历史经验</td>"
+            f"<td colspan='2'>分组={_escape(memory_payload.get('scope_key', 'N/A'))} | "
+            f"读取={_escape(memory_payload.get('retrieval_status', 'unknown'))} | "
+            f"写回={_escape(memory_payload.get('writeback_status', 'unknown'))}</td>"
+            "</tr>"
+        )
+    if entry.stage_contract_status:
+        extra_rows.append(
+            "<tr>"
+            "<td>阶段审计</td>"
+            f"<td colspan='2'>状态={_escape(entry.stage_contract_status)} | "
+            f"passed={_escape(entry.stage_contract_passed)} | "
+            f"findings={_escape(' | '.join(entry.stage_contract_findings) if entry.stage_contract_findings else 'none')}</td>"
             "</tr>"
         )
     if entry.document_ingestion_log_path is not None:

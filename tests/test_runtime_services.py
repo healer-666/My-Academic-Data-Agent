@@ -80,14 +80,16 @@ class RuntimeServiceTests(unittest.TestCase):
         bundle = KnowledgeContextProvider().collect(
             data_context=_DataContext(),
             user_query="Please focus on biomarker meaning.",
-            memory_context="Previously accepted preference: keep interpretation conservative.",
+            success_memory_context="Previously accepted preference: keep interpretation conservative.",
+            failure_memory_context="Do not use causal language without experimental evidence.",
             reference_paths=(ref_path,),
         )
 
         rendered = bundle.render_for_prompt()
         self.assertIn("Please focus on biomarker meaning.", rendered)
         self.assertIn("knowledge_ref.txt", rendered)
-        self.assertIn("<Project_Memory_Context>", rendered)
+        self.assertIn("<Success_Memory_Context>", rendered)
+        self.assertIn("<Failure_Memory_Context>", rendered)
 
     def test_knowledge_context_provider_renders_retrieved_chunks(self):
         class _DataContext:

@@ -117,6 +117,9 @@ class WebAppTests(unittest.TestCase):
         ), patch(
             "data_analysis_agent.web.app.load_history_qa_runs",
             return_value=([("run_demo | finance | accepted | 2026-04-14", "run_demo")], ["run_demo"]),
+        ), patch(
+            "data_analysis_agent.web.app.load_knowledge_base_status",
+            return_value="<section>知识库状态 / 已收录文档</section>",
         ):
             demo = app.build_demo()
 
@@ -132,25 +135,26 @@ class WebAppTests(unittest.TestCase):
             for component in _FakeComponent.instances
             if component.args and isinstance(component.args[0], str)
         ]
-        self.assertTrue(any("结构化表格数据" in text for text in text_fragments))
-        self.assertTrue(any("历史问答" in text for text in text_fragments))
+        self.assertTrue(any("上传表格" in text or "CSV / Excel 表格分析" in text for text in text_fragments))
+        self.assertTrue(any("知识库状态 / 已收录文档" in text for text in text_fragments))
 
         tab_labels = [component.args[0] for component in _FakeComponent.instances if component.component_type == "Tab"]
-        for expected_tab in ["总览", "发起分析", "运行结果", "历史记录", "历史问答"]:
+        for expected_tab in ["开始分析", "查看结果", "历史与追问"]:
             self.assertIn(expected_tab, tab_labels)
 
         labels = [component.kwargs.get("label") for component in _FakeComponent.instances]
-        self.assertIn("数据文件", labels)
-        self.assertIn("报告质量档位", labels)
-        self.assertIn("视觉审稿", labels)
-        self.assertIn("启用 Project Memory 回忆", labels)
-        self.assertIn("问答运行范围", labels)
-        self.assertIn("问答模式", labels)
+        self.assertIn("上传表格数据", labels)
+        self.assertIn("可沉淀的参考资料（可选，多文件）", labels)
+        self.assertIn("输出深度", labels)
+        self.assertIn("检查图表表达", labels)
+        self.assertIn("参考历史经验", labels)
+        self.assertIn("追问范围", labels)
+        self.assertIn("追问方式", labels)
         self.assertNotIn("文档解析模式", labels)
         self.assertNotIn("主表选择", labels)
 
         file_components = [component for component in _FakeComponent.instances if component.component_type == "File"]
-        upload_component = next(component for component in file_components if component.kwargs.get("label") == "数据文件")
+        upload_component = next(component for component in file_components if component.kwargs.get("label") == "上传表格数据")
         self.assertEqual(upload_component.kwargs["file_types"], [".csv", ".xls", ".xlsx"])
 
         button_components = [
@@ -160,8 +164,7 @@ class WebAppTests(unittest.TestCase):
         ]
         button_labels = [component.args[0] for component in button_components if component.args]
         self.assertIn("开始分析", button_labels)
-        self.assertIn("刷新历史记录", button_labels)
-        self.assertIn("刷新问答运行列表", button_labels)
+        self.assertIn("刷新历史与知识库", button_labels)
         self.assertIn("开始追问", button_labels)
         self.assertNotIn("预览候选表", button_labels)
 
@@ -173,7 +176,7 @@ class WebAppTests(unittest.TestCase):
         quality_mode = next(
             component
             for component in _FakeComponent.instances
-            if component.component_type == "Dropdown" and component.kwargs.get("label") == "报告质量档位"
+            if component.component_type == "Dropdown" and component.kwargs.get("label") == "输出深度"
         )
         self.assertEqual(len(quality_mode.change_calls), 1)
 

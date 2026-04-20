@@ -1,0 +1,27 @@
+{
+  "task_id": "group_comparison_demo",
+  "title": "两组差异分析示例",
+  "data_path": "data/eval/group_comparison_demo.csv",
+  "question": "比较 A 组和 B 组的 value 是否存在明显差异，并生成至少一张图表。",
+  "task_type": "group_comparison",
+  "quality_mode": "standard",
+  "latency_mode": "auto",
+  "use_rag": false,
+  "use_memory": false,
+  "memory_scope_key": "eval-demo",
+  "expected_methods": ["descriptive_statistics", "group_comparison"],
+  "key_checks": [
+    "must_workflow_complete",
+    "must_create_cleaned_data",
+    "must_pass_execution_audit",
+    "must_generate_report",
+    "must_generate_trace",
+    "must_generate_at_least_one_chart"
+  ],
+  "manual_expectations": [
+    "结论不要写成因果",
+    "至少解释一张图表"
+  ],
+  "common_failures": ["review_rejection"],
+  "notes": "最小分组比较示例。"
+}

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RegressionRules",
+  "type": "object",
+  "properties": {
+    "max_accept_rate_drop": {"type": "number"},
+    "max_workflow_complete_rate_drop": {"type": "number"},
+    "max_execution_audit_pass_rate_drop": {"type": "number"},
+    "max_review_reject_rate_increase": {"type": "number"},
+    "max_avg_step_count_increase": {"type": "number"},
+    "max_avg_duration_ratio_increase": {"type": "number"}
+  },
+  "additionalProperties": false
+}

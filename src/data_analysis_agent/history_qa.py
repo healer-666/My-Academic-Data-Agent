@@ -11,7 +11,7 @@ from typing import Any, Iterable
 
 from .config import RuntimeConfig, load_runtime_config
 from .llm import build_llm
-from .memory import ProjectMemoryService
+from .memory import FailureMemoryService, ProjectMemoryService, SuccessMemoryService
 from .rag.embeddings import OpenAIEmbeddingClient
 from .reporting import _iter_markdown_sections
 from .web.history import scan_run_history
@@ -31,7 +31,8 @@ class HistoryKnowledgeRecord:
     review_summary: str
     figure_summaries: tuple[str, ...]
     trace_summary: str
-    memory_snippets: tuple[str, ...]
+    success_memory_snippets: tuple[str, ...]
+    failure_memory_snippets: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -201,8 +202,13 @@ def _build_history_record(entry, *, memory_base_dir: str | Path | None = None) -
     source_data_path = ""
     if isinstance(run_metadata, dict):
         source_data_path = str(run_metadata.get("data_path", "")).strip()
-    memory_snippets = _load_memory_snippets(
-        payload.get("memory", {}) if isinstance(payload, dict) else {},
+    success_memory_snippets = _load_success_memory_snippets(
+        payload.get("success_memory", payload.get("memory", {})) if isinstance(payload, dict) else {},
+        memory_scope_key=str(run_metadata.get("memory_scope_key", "") or ""),
+        memory_base_dir=memory_base_dir,
+    )
+    failure_memory_snippets = _load_failure_memory_snippets(
+        payload.get("failure_memory", {}) if isinstance(payload, dict) else {},
         memory_scope_key=str(run_metadata.get("memory_scope_key", "") or ""),
         memory_base_dir=memory_base_dir,
     )
@@ -219,7 +225,8 @@ def _build_history_record(entry, *, memory_base_dir: str | Path | None = None) -
         review_summary=review_summary,
         figure_summaries=figure_summaries,
         trace_summary=trace_summary,
-        memory_snippets=memory_snippets,
+        success_memory_snippets=success_memory_snippets,
+        failure_memory_snippets=failure_memory_snippets,
     )
 
 
@@ -272,7 +279,12 @@ def _summarize_figure(path: Path, report_text: str) -> str:
     return f"{path.name}: 图表产物"
 
 
-def _load_memory_snippets(memory_payload: Any, *, memory_scope_key: str, memory_base_dir: str | Path | None = None) -> tuple[str, ...]:
+def _load_success_memory_snippets(
+    memory_payload: Any,
+    *,
+    memory_scope_key: str,
+    memory_base_dir: str | Path | None = None,
+) -> tuple[str, ...]:
     if isinstance(memory_payload, dict):
         retrieved = memory_payload.get("retrieved_records", [])
         if isinstance(retrieved, list) and retrieved:
@@ -297,7 +309,7 @@ def _load_memory_snippets(memory_payload: Any, *, memory_scope_key: str, memory_
             embedding_api_key="",
             embedding_base_url="",
         )
-        service = ProjectMemoryService(runtime_config=runtime_config, memory_base_dir=memory_base_dir)
+        service = SuccessMemoryService(runtime_config=runtime_config, memory_base_dir=memory_base_dir)
         collection = service._get_collection()
         payload = collection.get(where={"memory_scope_key": memory_scope_key}, include=["documents", "metadatas"])
     except Exception:
@@ -313,6 +325,57 @@ def _load_memory_snippets(memory_payload: Any, *, memory_scope_key: str, memory_
         text = " ".join(str(document or "").split()).strip()
         if text:
             snippets.append(f"{memory_type}: {text[:180]}")
+        if len(snippets) >= 4:
+            break
+    return tuple(snippets)
+
+
+def _load_failure_memory_snippets(
+    memory_payload: Any,
+    *,
+    memory_scope_key: str,
+    memory_base_dir: str | Path | None = None,
+) -> tuple[str, ...]:
+    if isinstance(memory_payload, dict):
+        retrieved = memory_payload.get("retrieved_records", [])
+        if isinstance(retrieved, list) and retrieved:
+            snippets = []
+            for item in retrieved[:4]:
+                if not isinstance(item, dict):
+                    continue
+                excerpt = str(item.get("text_excerpt", "")).strip()
+                failure_type = str(item.get("failure_type", "")).strip() or "failure"
+                if excerpt:
+                    snippets.append(f"{failure_type}: {excerpt}")
+            if snippets:
+                return tuple(snippets)
+    if not memory_scope_key:
+        return ()
+    try:
+        runtime_config = RuntimeConfig(
+            model_id="history-qa-failure-memory",
+            api_key="unused",
+            base_url="https://unused",
+            embedding_model_id="",
+            embedding_api_key="",
+            embedding_base_url="",
+        )
+        service = FailureMemoryService(runtime_config=runtime_config, memory_base_dir=memory_base_dir)
+        collection = service._get_collection()
+        payload = collection.get(where={"memory_scope_key": memory_scope_key}, include=["documents", "metadatas"])
+    except Exception:
+        return ()
+    documents = payload.get("documents", [[]]) if isinstance(payload, dict) else [[]]
+    metadatas = payload.get("metadatas", [[]]) if isinstance(payload, dict) else [[]]
+    snippets: list[str] = []
+    for index, document in enumerate(documents[0] if documents else []):
+        metadata = (metadatas[0] if metadatas else [])[index] if metadatas else {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        failure_type = str(metadata.get("failure_type", "")).strip() or "failure"
+        text = " ".join(str(document or "").split()).strip()
+        if text:
+            snippets.append(f"{failure_type}: {text[:180]}")
         if len(snippets) >= 4:
             break
     return tuple(snippets)
@@ -378,18 +441,33 @@ def _build_history_slices(records: Iterable[HistoryKnowledgeRecord]) -> tuple[Hi
                     text=summary,
                 )
             )
-        for index, snippet in enumerate(record.memory_snippets, start=1):
+        for index, snippet in enumerate(record.success_memory_snippets, start=1):
             slices.append(
                 HistoryKnowledgeSlice(
-                    slice_id=f"{record.run_id}:memory:{index}",
+                    slice_id=f"{record.run_id}:success_memory:{index}",
                     run_id=record.run_id,
                     timestamp=record.timestamp,
                     review_status=record.review_status,
                     workflow_complete=record.workflow_complete,
                     detected_domain=record.detected_domain,
                     quality_mode=record.quality_mode,
-                    source_type="memory",
+                    source_type="success_memory",
                     title=f"项目记忆 {index}",
+                    text=snippet,
+                )
+            )
+        for index, snippet in enumerate(record.failure_memory_snippets, start=1):
+            slices.append(
+                HistoryKnowledgeSlice(
+                    slice_id=f"{record.run_id}:failure_memory:{index}",
+                    run_id=record.run_id,
+                    timestamp=record.timestamp,
+                    review_status=record.review_status,
+                    workflow_complete=record.workflow_complete,
+                    detected_domain=record.detected_domain,
+                    quality_mode=record.quality_mode,
+                    source_type="failure_memory",
+                    title=f"失败教训 {index}",
                     text=snippet,
                 )
             )

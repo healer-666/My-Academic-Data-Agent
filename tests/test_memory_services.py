@@ -15,9 +15,12 @@ if str(SRC_PATH) not in sys.path:
 from data_analysis_agent.config import RuntimeConfig
 from data_analysis_agent.data_context import DataContextSummary
 from data_analysis_agent.memory import (
+    FailureMemoryRecord,
+    FailureMemoryService,
     MemoryRecord,
     ProjectMemoryService,
     derive_memory_scope_key,
+    extract_failure_memory_records,
     extract_memory_records,
 )
 from data_analysis_agent.reporting import ReportTelemetry
@@ -201,6 +204,77 @@ class MemoryServiceTests(unittest.TestCase):
         prompt_text = service.format_for_prompt(retrieval.records)
         self.assertIn("analysis_summary", prompt_text)
         self.assertIn("Use conservative biomarker interpretation.", prompt_text)
+
+    def test_extract_failure_memory_records_builds_negative_constraints(self):
+        result = self._build_result(self._workspace_case_dir() / "outputs" / "run_failed", review_status="rejected")
+        failed = AnalysisRunResult(
+            **{
+                **result.__dict__,
+                "workflow_complete": False,
+                "review_critique": "1. Do not use causal language.\n2. Recheck cleaned_data.csv reload.",
+                "execution_audit_status": "failed",
+                "execution_audit_passed": False,
+                "execution_audit_findings": ("No later Python step explicitly reloaded cleaned_data.csv.",),
+            }
+        )
+
+        extracted = extract_failure_memory_records(
+            result=failed,
+            review_history=(),
+            memory_scope_key="project-alpha",
+        )
+
+        self.assertGreaterEqual(len(extracted.records), 2)
+        self.assertTrue(all(record.usage_mode == "negative" for record in extracted.records))
+        self.assertIn("failure_constraint", {record.failure_type for record in extracted.records})
+
+    def test_failure_memory_service_write_is_idempotent_and_retrievable(self):
+        collection = _StubCollection()
+        runtime_config = RuntimeConfig(
+            model_id="demo-model",
+            api_key="demo-key",
+            base_url="https://example.com/v1",
+            embedding_model_id="text-embedding-demo",
+            embedding_api_key="embed-key",
+            embedding_base_url="https://embed.example.com/v1",
+        )
+        record = FailureMemoryRecord(
+            memory_id="failure-1",
+            memory_scope_key="project-alpha",
+            failure_type="failure_constraint",
+            run_id="run_fail_1",
+            source_report_path="outputs/run_fail_1/final_report.md",
+            source_trace_path="outputs/run_fail_1/logs/agent_trace.json",
+            detected_domain="biomedicine",
+            quality_mode="standard",
+            created_at="2026-04-15T12:00:00",
+            review_status="rejected",
+            workflow_complete=False,
+            execution_audit_status="failed",
+            trigger_stage="review",
+            text="Do not finish when reviewer-blocking issues remain unresolved.",
+            avoidance_rule="Resolve reviewer-blocking issues before finish.",
+            source_names=("guideline.md",),
+        )
+        embed_stub = type("EmbedStub", (), {"embed_texts": staticmethod(lambda texts: [[0.1, 0.2] for _ in texts])})()
+        with patch("data_analysis_agent.memory.service.OpenAIEmbeddingClient", return_value=embed_stub):
+            service = FailureMemoryService(runtime_config=runtime_config, memory_base_dir=self._workspace_case_dir() / "failure_memory")
+        with patch.object(service, "_get_collection", return_value=collection):
+            write_one = service.write_records(records=(record,), run_id="run_fail_1")
+            write_two = service.write_records(records=(record,), run_id="run_fail_1")
+            retrieval = service.retrieve(
+                memory_scope_key="project-alpha",
+                user_query="Avoid common reviewer failures",
+                data_context=type("Ctx", (), {"columns": ["marker_a"], "selected_table_headers": (), "selected_table_numeric_columns": (), "background_literature_context": "", "selected_table_id": ""})(),
+            )
+
+        self.assertEqual(write_one.status, "written")
+        self.assertEqual(write_two.status, "already_written")
+        self.assertEqual(retrieval.status, "retrieved")
+        self.assertEqual(retrieval.match_count, 1)
+        prompt_text = service.format_for_prompt(retrieval.records)
+        self.assertIn("AVOID", prompt_text)
+        self.assertIn("Resolve reviewer-blocking issues", prompt_text)
 
 
 if __name__ == "__main__":

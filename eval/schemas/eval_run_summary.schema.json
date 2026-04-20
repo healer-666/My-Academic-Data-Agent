@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EvalRunSummary",
+  "type": "object",
+  "required": [
+    "task_id",
+    "title",
+    "run_id",
+    "run_dir",
+    "data_path",
+    "question",
+    "accepted",
+    "review_status",
+    "workflow_complete",
+    "execution_audit_status",
+    "execution_audit_passed",
+    "failure_types",
+    "primary_failure_type",
+    "key_check_results"
+  ],
+  "additionalProperties": true
+}

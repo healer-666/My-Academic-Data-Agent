@@ -15,7 +15,8 @@ from .rag.models import RetrievedChunk
 class KnowledgeContextBundle:
     background_context: str = ""
     user_context: str = ""
-    memory_context: str = ""
+    success_memory_context: str = ""
+    failure_memory_context: str = ""
     reference_context: str = ""
     retrieved_context: str = ""
     retrieved_evidence_register: str = ""
@@ -28,11 +29,17 @@ class KnowledgeContextBundle:
                 f"{self.user_context}\n"
                 "</User_Intent_Context>"
             )
-        if self.memory_context:
+        if self.success_memory_context:
             sections.append(
-                "<Project_Memory_Context>\n"
-                f"{self.memory_context}\n"
-                "</Project_Memory_Context>"
+                "<Success_Memory_Context>\n"
+                f"{self.success_memory_context}\n"
+                "</Success_Memory_Context>"
+            )
+        if self.failure_memory_context:
+            sections.append(
+                "<Failure_Memory_Context>\n"
+                f"{self.failure_memory_context}\n"
+                "</Failure_Memory_Context>"
             )
         if self.reference_context:
             sections.append(
@@ -76,7 +83,8 @@ class KnowledgeContextProvider:
         *,
         data_context: DataContextSummary,
         user_query: str = "",
-        memory_context: str = "",
+        success_memory_context: str = "",
+        failure_memory_context: str = "",
         reference_paths: Iterable[str | Path] = (),
         retrieved_chunks: Iterable[RetrievedChunk] = (),
     ) -> KnowledgeContextBundle:
@@ -141,7 +149,8 @@ class KnowledgeContextProvider:
         return KnowledgeContextBundle(
             background_context=data_context.background_literature_context,
             user_context=str(user_query or "").strip(),
-            memory_context=str(memory_context or "").strip(),
+            success_memory_context=str(success_memory_context or "").strip(),
+            failure_memory_context=str(failure_memory_context or "").strip(),
             reference_context="\n".join(reference_chunks).strip(),
             retrieved_context="\n".join(retrieved_lines).strip(),
             retrieved_evidence_register="\n".join(evidence_lines).strip(),

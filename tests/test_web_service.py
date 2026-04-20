@@ -20,7 +20,9 @@ from data_analysis_agent.web.service import (
     answer_history_question_ui,
     copy_uploaded_file,
     create_run_bundle,
+    load_knowledge_base_status,
     load_history_qa_runs,
+    load_workspace_browser_state,
     stream_analysis_session,
 )
 from data_analysis_agent.web.viewmodels import default_max_reviews_for_quality, format_event_line
@@ -184,6 +186,41 @@ class WebServiceTests(unittest.TestCase):
         self.assertEqual(choices[0][1], "run_demo")
         self.assertEqual(defaults, ["run_demo"])
 
+    def test_load_knowledge_base_status_lists_indexed_files(self):
+        case_dir = self._workspace_case_dir()
+        kb_dir = case_dir / "knowledge_base"
+        files_dir = kb_dir / "files"
+        files_dir.mkdir(parents=True, exist_ok=True)
+        (files_dir / "glossary.md").write_text("demo", encoding="utf-8")
+        (kb_dir / "chroma").mkdir(parents=True, exist_ok=True)
+        (kb_dir / "keyword_index.json").write_text('{"chunks":[{"chunk_id":"c1"},{"chunk_id":"c2"}]}', encoding="utf-8")
+
+        html = load_knowledge_base_status(kb_dir)
+
+        self.assertIn("知识库状态 / 已收录文档", html)
+        self.assertIn("glossary.md", html)
+        self.assertIn(">2<", html)
+
+    def test_load_workspace_browser_state_returns_history_and_qa_updates(self):
+        case_dir = self._workspace_case_dir()
+        outputs_dir = case_dir / "outputs"
+        run_dir = outputs_dir / "run_demo"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "final_report.md").write_text("# Demo", encoding="utf-8")
+        logs_dir = run_dir / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        (logs_dir / "agent_trace.json").write_text(
+            '{"run_metadata":{"timestamp":"2026-04-15T10:00:00","quality_mode":"standard","latency_mode":"auto","input_kind":"tabular"},"telemetry":{"domain":"finance"},"artifact_validation":{"workflow_complete":true},"review_status":"accepted"}',
+            encoding="utf-8",
+        )
+
+        with patch("data_analysis_agent.web.service._gradio_update", side_effect=lambda **kwargs: kwargs):
+            state = load_workspace_browser_state(outputs_dir)
+
+        self.assertEqual(state[0]["value"], run_dir.as_posix())
+        self.assertIn("历史运行总览", state[1])
+        self.assertEqual(state[8]["value"], ["run_demo"])
+
     def test_answer_history_question_ui_formats_sources_and_warnings(self):
         qa_result = SimpleNamespace(
             answer_markdown="## 历史问答结果\n\n这里是回答。",
@@ -223,7 +260,10 @@ class WebServiceTests(unittest.TestCase):
             self.assertEqual(len(kwargs["knowledge_paths"]), 1)
             return result
 
-        with patch("data_analysis_agent.web.service.run_analysis", side_effect=fake_run_analysis):
+        with patch("data_analysis_agent.web.service.run_analysis", side_effect=fake_run_analysis), patch(
+            "data_analysis_agent.web.service._gradio_update",
+            side_effect=lambda **kwargs: kwargs,
+        ):
             outputs = list(
                 stream_analysis_session(
                     upload.as_posix(),
@@ -256,6 +296,10 @@ class WebServiceTests(unittest.TestCase):
         self.assertTrue(str(final_output[8]).endswith("final_report.md"))
         self.assertTrue(str(final_output[9]).endswith("agent_trace.json"))
         self.assertTrue(str(final_output[10]).endswith(".zip"))
+        self.assertIn("run_demo", final_output[11]["value"])
+        self.assertIn("历史运行总览", final_output[12])
+        self.assertEqual(final_output[19]["value"], ["run_demo"])
+        self.assertIn("知识库状态 / 已收录文档", final_output[20])
 
 
 if __name__ == "__main__":

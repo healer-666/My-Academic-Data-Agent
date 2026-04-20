@@ -76,6 +76,7 @@ class AgentStepTrace:
     action: str
     decision: str = ""
     tool_name: Optional[str] = None
+    tool_input: str = ""
     tool_status: str = "unknown"
     observation: Optional[str] = None
     observation_preview: str = ""
@@ -83,6 +84,45 @@ class AgentStepTrace:
     parse_error: Optional[str] = None
     llm_duration_ms: int = 0
     tool_duration_ms: int = 0
+
+
+@dataclass(frozen=True)
+class StageExecutionFinding:
+    finding_type: str
+    message: str
+    step_index: int | None = None
+
+    def to_trace_dict(self) -> dict[str, object]:
+        return {
+            "type": self.finding_type,
+            "message": self.message,
+            "step_index": self.step_index,
+        }
+
+
+@dataclass(frozen=True)
+class StageExecutionAuditResult:
+    status: str = "not_checked"
+    stage1_save_detected: bool = False
+    stage2_cleaned_reload_detected: bool = False
+    raw_data_reused_after_stage1: bool = False
+    findings: tuple[StageExecutionFinding, ...] = ()
+    evidence_step_indices: tuple[int, ...] = ()
+
+    @property
+    def passed(self) -> bool:
+        return self.status == "passed"
+
+    def to_trace_dict(self) -> dict[str, object]:
+        return {
+            "status": self.status,
+            "passed": self.passed,
+            "stage1_save_detected": self.stage1_save_detected,
+            "stage2_cleaned_reload_detected": self.stage2_cleaned_reload_detected,
+            "raw_data_reused_after_stage1": self.raw_data_reused_after_stage1,
+            "findings": [finding.to_trace_dict() for finding in self.findings],
+            "evidence_step_indices": list(self.evidence_step_indices),
+        }
 
 
 @dataclass(frozen=True)
@@ -117,6 +157,9 @@ class ArtifactValidationResult:
     cleaned_data_exists: bool
     report_exists: bool
     trace_exists: bool
+    stage_contract_status: str = "not_checked"
+    stage_contract_findings: tuple[str, ...] = ()
+    stage_contract_passed: bool = True
 
 
 @dataclass(frozen=True)
@@ -149,6 +192,7 @@ class AnalystRoundRecord:
     round_index: int
     report_path: Path
     step_traces: tuple[AgentStepTrace, ...]
+    execution_audit: StageExecutionAuditResult = StageExecutionAuditResult()
 
 
 @dataclass(frozen=True)
@@ -216,8 +260,15 @@ class AnalysisRunResult:
     memory_match_count: int = 0
     memory_writeback_status: str = "disabled"
     memory_written_count: int = 0
+    failure_memory_enabled: bool = False
+    failure_memory_match_count: int = 0
+    failure_memory_writeback_status: str = "disabled"
+    failure_memory_written_count: int = 0
     total_duration_ms: int = 0
     llm_duration_ms: int = 0
     tool_duration_ms: int = 0
     review_duration_ms: int = 0
     timing_breakdown: dict[str, int] = field(default_factory=dict)
+    execution_audit_status: str = "not_checked"
+    execution_audit_passed: bool = False
+    execution_audit_findings: tuple[str, ...] = ()

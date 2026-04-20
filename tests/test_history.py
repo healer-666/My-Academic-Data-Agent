@@ -68,6 +68,9 @@ class HistoryTests(unittest.TestCase):
                 "artifact_validation": {
                     "workflow_complete": True,
                     "warnings": [],
+                    "stage_contract_status": "failed",
+                    "stage_contract_findings": ["No later Python step explicitly reloaded cleaned_data.csv."],
+                    "stage_contract_passed": False,
                 },
                 "review_status": "accepted",
                 "vision_review_history": [
@@ -129,7 +132,9 @@ class HistoryTests(unittest.TestCase):
         self.assertIn("候选表数量", details[0])
         self.assertIn("table_01", details[0])
         self.assertIn("PDF 多表综合", details[0])
+        self.assertIn("阶段审计", details[0])
         self.assertIn("文档解析日志", details[3])
+        self.assertIn("No later Python step explicitly reloaded cleaned_data.csv.", details[3])
         self.assertTrue(str(details[4]).endswith("final_report.md"))
         self.assertTrue(str(details[5]).endswith("agent_trace.json"))
         self.assertTrue(str(details[6]).endswith("cleaned_data.csv"))

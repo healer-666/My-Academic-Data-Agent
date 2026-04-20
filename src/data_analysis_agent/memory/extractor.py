@@ -1,4 +1,4 @@
-"""Distill accepted runs into compact project memory records."""
+"""Distill accepted and failed runs into layered memory records."""
 
 from __future__ import annotations
 
@@ -10,13 +10,19 @@ from typing import Any
 
 from ..reporting import _iter_markdown_sections
 from ..runtime_models import AnalysisRunResult, ReviewRecord
-from .models import MemoryRecord
+from .models import FailureMemoryRecord, MemoryRecord
 
 
 @dataclass(frozen=True)
 class ExtractionResult:
     records: tuple[MemoryRecord, ...]
     llm_distilled: bool = False
+    warnings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class FailureExtractionResult:
+    records: tuple[FailureMemoryRecord, ...]
     warnings: tuple[str, ...] = ()
 
 
@@ -76,6 +82,56 @@ def extract_memory_records(
     return ExtractionResult(records=records, llm_distilled=llm_distilled, warnings=tuple(warnings))
 
 
+def extract_success_memory_records(
+    *,
+    result: AnalysisRunResult,
+    review_history: tuple[ReviewRecord, ...],
+    memory_scope_key: str,
+    llm: Any = None,
+) -> ExtractionResult:
+    return extract_memory_records(
+        result=result,
+        review_history=review_history,
+        memory_scope_key=memory_scope_key,
+        llm=llm,
+    )
+
+
+def extract_failure_memory_records(
+    *,
+    result: AnalysisRunResult,
+    review_history: tuple[ReviewRecord, ...],
+    memory_scope_key: str,
+) -> FailureExtractionResult:
+    warnings: list[str] = []
+    created_at = datetime.now().isoformat(timespec="seconds")
+    source_names = tuple(result.rag_cited_sources or result.rag_sources_used or ())
+    record_specs = _build_failure_record_specs(result=result, review_history=review_history)
+    records = tuple(
+        FailureMemoryRecord(
+            memory_id=f"failure-{result.run_dir.name}-{failure_type}",
+            memory_scope_key=memory_scope_key,
+            failure_type=failure_type,
+            run_id=result.run_dir.name,
+            source_report_path=result.report_path.as_posix(),
+            source_trace_path=result.trace_path.as_posix(),
+            detected_domain=result.detected_domain or "unknown",
+            quality_mode=result.quality_mode,
+            created_at=created_at,
+            review_status=result.review_status,
+            workflow_complete=result.workflow_complete,
+            execution_audit_status=result.execution_audit_status,
+            trigger_stage=trigger_stage,
+            text=text,
+            avoidance_rule=avoidance_rule,
+            source_names=source_names,
+        )
+        for failure_type, trigger_stage, text, avoidance_rule in record_specs
+        if text.strip()
+    )
+    return FailureExtractionResult(records=records, warnings=tuple(warnings))
+
+
 def _build_rule_based_record_specs(
     *,
     result: AnalysisRunResult,
@@ -96,6 +152,76 @@ def _build_rule_based_record_specs(
     if rag_usage_note:
         records.append(("rag_usage_note", rag_usage_note))
     return tuple(records)
+
+
+def _build_failure_record_specs(
+    *,
+    result: AnalysisRunResult,
+    review_history: tuple[ReviewRecord, ...],
+) -> tuple[tuple[str, str, str, str], ...]:
+    specs: list[tuple[str, str, str, str]] = []
+    critique_lines = []
+    for review in review_history:
+        critique_lines.extend(_extract_actionable_review_lines(review.critique))
+        for finding in review.evidence_findings:
+            message = _normalize_inline_text(finding.message)
+            if message:
+                critique_lines.append(message)
+    critique_lines = list(dict.fromkeys(item for item in critique_lines if item))
+
+    audit_findings = tuple(item for item in result.execution_audit_findings if _normalize_inline_text(item))
+    if result.execution_audit_status != "passed":
+        rule = (
+            audit_findings[0]
+            if audit_findings
+            else "Do not proceed to formal analysis unless cleaned_data.csv is explicitly saved and reloaded in a later Python step."
+        )
+        specs.append(
+            (
+                "failure_constraint",
+                "execution_audit",
+                f"Avoid repeating the failed execution pattern. {rule}",
+                "Before finishing, verify that Stage 1 saved cleaned_data.csv and Stage 2 explicitly reloaded it in a later Python step.",
+            )
+        )
+        specs.append(
+            (
+                "failure_pattern",
+                "execution_audit",
+                f"This run failed stage execution audit with status {result.execution_audit_status}. Findings: {' | '.join(audit_findings) if audit_findings else 'No explicit findings were captured.'}",
+                "Treat stage-contract violations as blocking errors and restart the analysis loop instead of forcing a finish.",
+            )
+        )
+
+    if result.review_status in {"rejected", "max_reviews_reached"}:
+        critique_text = " | ".join(critique_lines[:4]) if critique_lines else _normalize_inline_text(result.review_critique)
+        specs.append(
+            (
+                "failure_constraint",
+                "review",
+                f"Do not ship a report that still violates reviewer expectations. {critique_text or 'Major reviewer issues remained unresolved.'}",
+                "Resolve all visible major reviewer concerns in one pass before treating the report as complete.",
+            )
+        )
+        specs.append(
+            (
+                "failure_checklist",
+                "review",
+                "Checklist before finishing: verify artifact paths, keep interpretation non-causal, and ensure any reviewer-blocking issue has been explicitly addressed.",
+                "Run a final self-check against reviewer critiques and artifact paths before finish.",
+            )
+        )
+
+    if not result.workflow_complete:
+        specs.append(
+            (
+                "failure_checklist",
+                "finalize",
+                "Do not treat a run as complete when the artifact contract is still broken.",
+                "Before ending the run, verify cleaned data, final report, trace, and stage audit all pass together.",
+            )
+        )
+    return tuple(dict.fromkeys(specs))
 
 
 def _build_analysis_summary(result: AnalysisRunResult) -> str:

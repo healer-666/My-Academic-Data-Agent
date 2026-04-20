@@ -1,0 +1,8 @@
+{
+  "max_accept_rate_drop": 0.05,
+  "max_workflow_complete_rate_drop": 0.05,
+  "max_execution_audit_pass_rate_drop": 0.01,
+  "max_review_reject_rate_increase": 0.05,
+  "max_avg_step_count_increase": 2.0,
+  "max_avg_duration_ratio_increase": 0.3
+}

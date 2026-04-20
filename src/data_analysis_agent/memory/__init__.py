@@ -9,9 +9,16 @@ __all__ = [
     "MemoryRecord",
     "MemoryRetrievalResult",
     "MemoryWriteResult",
+    "FailureMemoryRecord",
+    "FailureMemoryRetrievalResult",
+    "FailureMemoryWriteResult",
+    "SuccessMemoryService",
+    "FailureMemoryService",
     "ProjectMemoryService",
     "derive_memory_scope_key",
     "extract_memory_records",
+    "extract_success_memory_records",
+    "extract_failure_memory_records",
 ]
 
 
@@ -19,9 +26,16 @@ _EXPORT_MAP = {
     "MemoryRecord": ("data_analysis_agent.memory.models", "MemoryRecord"),
     "MemoryRetrievalResult": ("data_analysis_agent.memory.models", "MemoryRetrievalResult"),
     "MemoryWriteResult": ("data_analysis_agent.memory.models", "MemoryWriteResult"),
+    "FailureMemoryRecord": ("data_analysis_agent.memory.models", "FailureMemoryRecord"),
+    "FailureMemoryRetrievalResult": ("data_analysis_agent.memory.models", "FailureMemoryRetrievalResult"),
+    "FailureMemoryWriteResult": ("data_analysis_agent.memory.models", "FailureMemoryWriteResult"),
+    "SuccessMemoryService": ("data_analysis_agent.memory.service", "SuccessMemoryService"),
+    "FailureMemoryService": ("data_analysis_agent.memory.service", "FailureMemoryService"),
     "ProjectMemoryService": ("data_analysis_agent.memory.service", "ProjectMemoryService"),
     "derive_memory_scope_key": ("data_analysis_agent.memory.scope", "derive_memory_scope_key"),
     "extract_memory_records": ("data_analysis_agent.memory.extractor", "extract_memory_records"),
+    "extract_success_memory_records": ("data_analysis_agent.memory.extractor", "extract_success_memory_records"),
+    "extract_failure_memory_records": ("data_analysis_agent.memory.extractor", "extract_failure_memory_records"),
 }
 
 

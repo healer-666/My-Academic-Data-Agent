@@ -1,0 +1,27 @@
+{
+  "task_id": "missing_values_demo",
+  "title": "缺失值处理示例",
+  "data_path": "data/eval/missing_values_demo.csv",
+  "question": "说明这份数据的缺失值情况，对 score 做基础分析并生成图表。",
+  "task_type": "missing_values",
+  "quality_mode": "standard",
+  "latency_mode": "auto",
+  "use_rag": false,
+  "use_memory": false,
+  "memory_scope_key": "eval-demo",
+  "expected_methods": ["missing_value_check", "descriptive_statistics"],
+  "key_checks": [
+    "must_workflow_complete",
+    "must_create_cleaned_data",
+    "must_pass_execution_audit",
+    "must_generate_report",
+    "must_generate_trace",
+    "must_generate_at_least_one_chart"
+  ],
+  "manual_expectations": [
+    "需要明确提到缺失值存在",
+    "不要忽略清洗步骤"
+  ],
+  "common_failures": ["cleaning_contract_failure"],
+  "notes": "用于验证清洗和报告链路。"
+}

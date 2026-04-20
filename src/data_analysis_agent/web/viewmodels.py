@@ -31,17 +31,17 @@ def format_duration(duration_ms: int) -> str:
 
 def quality_mode_label(quality_mode: str) -> str:
     return {
-        "draft": "初稿 draft",
-        "standard": "标准 standard",
-        "publication": "高级 publication",
+        "draft": "快速草稿",
+        "standard": "标准分析",
+        "publication": "深入分析",
     }.get(quality_mode, quality_mode or "未知")
 
 
 def latency_mode_label(latency_mode: str) -> str:
     return {
-        "auto": "自适应 auto",
-        "quality": "质量优先 quality",
-        "fast": "极速 fast",
+        "auto": "自动平衡",
+        "quality": "质量优先",
+        "fast": "速度优先",
     }.get(latency_mode, latency_mode or "未知")
 
 
@@ -76,7 +76,7 @@ def ingestion_status_label(status: str) -> str:
 
 
 def input_kind_label(input_kind: str) -> str:
-    return {"tabular": "结构化表格", "pdf": "PDF 文档"}.get(input_kind, input_kind or "未知")
+    return {"tabular": "结构化表格", "pdf": "PDF 文档（旧版运行）"}.get(input_kind, input_kind or "未知")
 
 
 def workflow_status_label(workflow_complete: bool) -> str:
@@ -116,41 +116,53 @@ def format_event_line(event_type: str, payload: dict[str, object]) -> str:
         shape = payload.get("shape", ("?", "?"))
         return f"数据上下文已准备：{shape[0]} 行 x {shape[1]} 列"
     if event_type == "knowledge_indexing_started":
-        return f"RAG 正在写入知识文件：{payload.get('file_count', 0)} 个"
+        return f"正在把参考资料写入知识库：{payload.get('file_count', 0)} 个"
     if event_type == "knowledge_indexing_completed":
-        return f"RAG 索引完成 | status={payload.get('status', 'unknown')} | indexed={payload.get('indexed_count', 0)}"
+        return f"参考资料已加入知识库 | status={payload.get('status', 'unknown')} | indexed={payload.get('indexed_count', 0)}"
     if event_type == "knowledge_indexing_skipped":
-        return f"RAG 索引跳过：{payload.get('reason', '')}"
+        return f"参考资料入库已跳过：{payload.get('reason', '')}"
     if event_type == "knowledge_structured_chunking_completed":
         return f"Structured chunking 完成 | chunks={payload.get('chunk_count', 0)} | enabled={payload.get('structured_chunking_enabled', False)}"
     if event_type == "knowledge_table_candidates_prepared":
         return f"PDF 表格候选已准备 | count={payload.get('table_candidate_count', 0)} | selected={payload.get('selected_table_id', '')}"
     if event_type == "knowledge_query_built":
-        return "RAG 检索 query 已生成（dense + keyword）"
+        return "已生成参考资料检索问题。"
     if event_type == "knowledge_dense_retrieval_completed":
         return f"Dense 检索完成 | matches={payload.get('match_count', 0)}"
     if event_type == "knowledge_keyword_retrieval_completed":
         return f"Keyword 检索完成 | matches={payload.get('match_count', 0)}"
     if event_type == "knowledge_rerank_completed":
-        return f"RAG 重排完成 | matches={payload.get('match_count', 0)} | strategy={payload.get('retrieval_strategy', 'unknown')}"
+        return f"参考资料排序完成 | matches={payload.get('match_count', 0)} | strategy={payload.get('retrieval_strategy', 'unknown')}"
     if event_type == "knowledge_retrieval_started":
-        return "开始检索本地知识库..."
+        return "开始检索本地参考资料..."
     if event_type == "knowledge_retrieval_completed":
-        return f"RAG 检索完成 | status={payload.get('status', 'unknown')} | matches={payload.get('match_count', 0)}"
+        return f"参考资料检索完成 | status={payload.get('status', 'unknown')} | matches={payload.get('match_count', 0)}"
     if event_type == "knowledge_retrieval_skipped":
-        return f"RAG 检索跳过：{payload.get('reason', '')}"
+        return f"参考资料检索跳过：{payload.get('reason', '')}"
     if event_type == "memory_retrieval_started":
-        return f"开始回忆 Project Memory | scope={payload.get('scope_key', '')}"
+        return f"开始读取历史经验 | scope={payload.get('scope_key', '')}"
     if event_type == "memory_retrieval_completed":
-        return f"Project Memory 命中完成 | status={payload.get('status', 'unknown')} | matches={payload.get('match_count', 0)}"
+        return f"历史经验命中完成 | status={payload.get('status', 'unknown')} | matches={payload.get('match_count', 0)}"
     if event_type == "memory_retrieval_skipped":
-        return f"Project Memory 跳过：{payload.get('reason', '')}"
+        return f"历史经验读取跳过：{payload.get('reason', '')}"
+    if event_type == "failure_memory_retrieval_started":
+        return f"开始读取失败教训 | scope={payload.get('scope_key', '')}"
+    if event_type == "failure_memory_retrieval_completed":
+        return f"失败教训命中完成 | status={payload.get('status', 'unknown')} | matches={payload.get('match_count', 0)}"
+    if event_type == "failure_memory_retrieval_skipped":
+        return f"失败教训读取跳过：{payload.get('reason', '')}"
     if event_type == "memory_writeback_started":
-        return f"开始写回 Project Memory | scope={payload.get('scope_key', '')}"
+        return f"开始写回历史经验 | scope={payload.get('scope_key', '')}"
     if event_type == "memory_writeback_completed":
-        return f"Project Memory 写回完成 | status={payload.get('status', 'unknown')} | written={payload.get('written_count', 0)}"
+        return f"历史经验写回完成 | status={payload.get('status', 'unknown')} | written={payload.get('written_count', 0)}"
     if event_type == "memory_writeback_skipped":
-        return f"Project Memory 写回跳过：{payload.get('reason', payload.get('status', ''))}"
+        return f"历史经验写回跳过：{payload.get('reason', payload.get('status', ''))}"
+    if event_type == "failure_memory_writeback_started":
+        return f"开始写回失败教训 | scope={payload.get('scope_key', '')}"
+    if event_type == "failure_memory_writeback_completed":
+        return f"失败教训写回完成 | status={payload.get('status', 'unknown')} | written={payload.get('written_count', 0)}"
+    if event_type == "failure_memory_writeback_skipped":
+        return f"失败教训写回跳过：{payload.get('reason', payload.get('status', ''))}"
     if event_type == "tool_registry_ready":
         tools = ", ".join(payload.get("tools", [])) if isinstance(payload.get("tools"), list) else ""
         return f"工具已就绪：{tools} | fast_path={payload.get('fast_path_enabled', False)} | max_steps={payload.get('effective_max_steps', '?')}"
@@ -231,7 +243,7 @@ def _build_rag_focus_block(result: AnalysisRunResult) -> str:
     memory_scope = result.memory_scope_key or "N/A"
     return (
         "<div class='review-highlight'>"
-        "<div class='review-status-pill'>RAG 检索概览</div>"
+        "<div class='review-status-pill'>参考资料检索</div>"
         f"<div class='review-highlight-body'>状态：{_escape(rag_status_label(result.rag_status))}<br>"
         f"命中数：{_escape(result.rag_match_count)}<br>"
         f"策略：{_escape(result.rag_retrieval_strategy)}<br>"
@@ -243,12 +255,20 @@ def _build_rag_focus_block(result: AnalysisRunResult) -> str:
         f"未归因段落：{_escape(uncited_sections)}</div>"
         "</div>"
         "<div class='review-highlight'>"
-        "<div class='review-status-pill'>Project Memory</div>"
+        "<div class='review-status-pill'>历史经验</div>"
         f"<div class='review-highlight-body'>启用：{_escape(result.memory_enabled)}<br>"
-        f"scope：{_escape(memory_scope)}<br>"
+        f"分组：{_escape(memory_scope)}<br>"
         f"命中数：{_escape(result.memory_match_count)}<br>"
         f"写回状态：{_escape(result.memory_writeback_status)}<br>"
         f"写入条数：{_escape(result.memory_written_count)}</div>"
+        "</div>"
+        "<div class='review-highlight'>"
+        "<div class='review-status-pill'>失败教训</div>"
+        f"<div class='review-highlight-body'>启用：{_escape(result.failure_memory_enabled)}<br>"
+        f"分组：{_escape(memory_scope)}<br>"
+        f"命中数：{_escape(result.failure_memory_match_count)}<br>"
+        f"写回状态：{_escape(result.failure_memory_writeback_status)}<br>"
+        f"写入条数：{_escape(result.failure_memory_written_count)}</div>"
         "</div>"
     )
 
@@ -259,8 +279,10 @@ def build_overview_html(result: AnalysisRunResult) -> str:
         ("识别领域", result.detected_domain or "unknown"),
         ("质量档位", quality_mode_label(result.quality_mode)),
         ("延迟模式", latency_mode_label(result.latency_mode)),
-        ("RAG", rag_status_label(result.rag_status)),
-        ("Memory", "启用" if result.memory_enabled else "关闭"),
+        ("参考资料", rag_status_label(result.rag_status)),
+        ("历史经验", "启用" if result.memory_enabled else "关闭"),
+        ("失败教训", "启用" if result.failure_memory_enabled else "关闭"),
+        ("阶段审计", "已通过" if result.execution_audit_passed else result.execution_audit_status),
         ("检索策略", result.rag_retrieval_strategy),
         ("文本审稿", review_status_label(result.review_status)),
         ("视觉审稿", vision_review_status_label(result.vision_review_status)),
@@ -277,7 +299,7 @@ def build_overview_html(result: AnalysisRunResult) -> str:
     return (
         "<section class='results-overview'>"
         "<div class='section-heading'>运行总览</div>"
-        "<div class='section-subtitle'>这里汇总当前任务的输入类型、质量模式、RAG / Memory 状态、审稿结果和关键耗时。</div>"
+        "<div class='section-subtitle'>这里汇总当前任务的结论背景、参考资料使用情况、审稿结果和关键耗时。</div>"
         f"{_build_ingestion_focus_block(result)}"
         f"{_build_rag_focus_block(result)}"
         f"<div class='metric-grid'>{card_html}</div>"
@@ -310,6 +332,11 @@ def build_summary_markdown(result: AnalysisRunResult) -> str:
     uncited_sections = ", ".join(result.rag_uncited_sections_detected) if result.rag_uncited_sections_detected else "无"
     warnings = "\n".join(f"- {item}" for item in result.workflow_warnings) if result.workflow_warnings else "- 无"
     memory_scope = result.memory_scope_key or "N/A"
+    execution_audit_findings = (
+        "\n".join(f"- {item}" for item in result.execution_audit_findings)
+        if result.execution_audit_findings
+        else "- 无"
+    )
     return (
         "## 运行摘要\n\n"
         f"- 输入类型：`{input_kind_label(result.input_kind)}`\n"
@@ -334,13 +361,21 @@ def build_summary_markdown(result: AnalysisRunResult) -> str:
         f"- Memory 命中数：`{result.memory_match_count}`\n"
         f"- Memory 写回状态：`{result.memory_writeback_status}`\n"
         f"- Memory 写入数：`{result.memory_written_count}`\n"
+        f"- Failure Memory 启用：`{result.failure_memory_enabled}`\n"
+        f"- Failure Memory 命中数：`{result.failure_memory_match_count}`\n"
+        f"- Failure Memory 写回状态：`{result.failure_memory_writeback_status}`\n"
+        f"- Failure Memory 写入数：`{result.failure_memory_written_count}`\n"
         f"- 视觉审稿：`{vision_review_status_label(result.vision_review_status)} ({result.vision_review_mode})`\n"
         f"- 文本审稿：`{review_status_label(result.review_status)}`\n"
         f"- 返修轮次：`{result.review_rounds_used}`\n"
+        f"- 阶段审计：`{result.execution_audit_status}`\n"
+        f"- 阶段审计通过：`{result.execution_audit_passed}`\n"
         f"- 工作流完成：`{result.workflow_complete}`\n"
         f"- 运行目录：`{result.run_dir.as_posix()}`\n"
         f"- 清洗数据：`{result.cleaned_data_path.as_posix()}`\n"
         f"- Trace：`{result.trace_path.as_posix()}`\n\n"
+        "### 阶段审计\n"
+        f"{execution_audit_findings}\n\n"
         "### 耗时拆解\n"
         f"- 总耗时：`{format_duration(result.total_duration_ms)}`\n"
         f"- LLM：`{format_duration(result.llm_duration_ms)}`\n"
@@ -445,11 +480,24 @@ def build_trace_html(result: AnalysisRunResult) -> str:
         f"写回状态：{_escape(result.memory_writeback_status)} | 写入条数：{_escape(result.memory_written_count)}"
         "</div>"
     )
+    failure_memory_block = (
+        "<div class='empty-panel'>"
+        f"Failure Memory：{_escape('启用' if result.failure_memory_enabled else '关闭')} | "
+        f"scope：{_escape(memory_scope)} | 命中数：{_escape(result.failure_memory_match_count)}<br>"
+        f"写回状态：{_escape(result.failure_memory_writeback_status)} | 写入条数：{_escape(result.failure_memory_written_count)}"
+        "</div>"
+    )
     visual_block = (
         "<div class='empty-panel'>"
         f"视觉审稿：{_escape(vision_review_status_label(result.vision_review_status))} | "
         f"耗时：{_escape(format_duration(result.vision_review_duration_ms))}<br>"
         f"{_escape(result.vision_review_summary or '暂无视觉审稿摘要。')}"
+        "</div>"
+    )
+    audit_block = (
+        "<div class='empty-panel'>"
+        f"阶段审计：{_escape('已通过' if result.execution_audit_passed else result.execution_audit_status)}<br>"
+        f"{_escape(' | '.join(result.execution_audit_findings) if result.execution_audit_findings else '未发现阶段契约问题。')}"
         "</div>"
     )
     return (
@@ -458,6 +506,8 @@ def build_trace_html(result: AnalysisRunResult) -> str:
         f"{document_block}"
         f"{rag_block}"
         f"{memory_block}"
+        f"{failure_memory_block}"
+        f"{audit_block}"
         f"{visual_block}"
         "<table class='trace-table'>"
         "<thead><tr><th>步骤</th><th>工具</th><th>状态</th><th>决策</th><th>耗时</th><th>摘要</th></tr></thead>"

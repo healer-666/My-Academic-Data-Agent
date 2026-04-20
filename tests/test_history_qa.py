@@ -74,6 +74,19 @@ class HistoryQaTests(unittest.TestCase):
                         {"memory_type": "analysis_summary", "text_excerpt": "Avoid causal language."},
                     ],
                 },
+                "success_memory": {
+                    "retrieved_records": [
+                        {"memory_type": "analysis_summary", "text_excerpt": "Keep interpretation conservative."},
+                    ],
+                },
+                "failure_memory": {
+                    "retrieved_records": [
+                        {
+                            "failure_type": "failure_constraint",
+                            "text_excerpt": "Do not finish before reloading cleaned_data.csv in Stage 2.",
+                        },
+                    ],
+                },
             }
             (run_dir / "logs" / "agent_trace.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
         return run_dir
@@ -89,7 +102,8 @@ class HistoryQaTests(unittest.TestCase):
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0].run_id, "run_20260414_100000")
         self.assertEqual(records[0].methods_used, ("Mann-Whitney U",))
-        self.assertIn("Avoid causal language", records[0].memory_snippets[0])
+        self.assertIn("Keep interpretation conservative", records[0].success_memory_snippets[0])
+        self.assertIn("Do not finish before reloading cleaned_data.csv", records[0].failure_memory_snippets[0])
 
     def test_retrieve_history_context_supports_single_run_filter(self):
         case_dir = self._workspace_case_dir()
@@ -106,6 +120,7 @@ class HistoryQaTests(unittest.TestCase):
         self.assertEqual(retrieval.mode, "single")
         self.assertEqual(retrieval.selected_run_ids, ("run_20260414_100000",))
         self.assertTrue(all(item.run_id == "run_20260414_100000" for item in retrieval.slices))
+        self.assertTrue(any(item.source_type == "failure_memory" for item in retrieval.slices))
 
     def test_answer_history_question_falls_back_and_marks_sources(self):
         case_dir = self._workspace_case_dir()

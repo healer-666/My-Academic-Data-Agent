@@ -119,9 +119,11 @@ Execution rules:
 17. Knowledge-based interpretation includes terminology explanations, domain meaning of indicators, literature background, and guideline-style interpretation.
 18. Do not invent citation labels, source names, page numbers, table ids, or evidence ids. Use only the citation labels supplied in the evidence register.
 19. Statistical findings computed directly from the dataset do not require RAG citations unless you explicitly combine them with retrieved background knowledge in the same conclusion.
-20. If the user context includes a <Project_Memory_Context> block, treat it as historical project memory only: reusable preferences, previously accepted constraints, and prior framing hints.
-21. Project memory is not direct evidence for the current dataset. If project memory conflicts with the current data or retrieved evidence, follow the current data and current evidence.
-22. Do not cite project memory as if it were retrieved evidence. Inline citations may only use labels from <Retrieved_Evidence_Register>.
+20. If the user context includes a <Success_Memory_Context> block, treat it as historical success memory only: reusable preferences, previously accepted constraints, and prior framing hints.
+21. If the user context includes a <Failure_Memory_Context> block, treat it as negative memory only: mistakes to avoid, hard reviewer or audit rules, and extra checks to perform before finishing.
+22. Neither success memory nor failure memory is direct evidence for the current dataset. If memory conflicts with the current data or retrieved evidence, follow the current data and current evidence.
+23. Failure memory is for guardrails only. Do not use it as domain knowledge, factual support, or a substitute for computation.
+24. Do not cite success memory or failure memory as if they were retrieved evidence. Inline citations may only use labels from <Retrieved_Evidence_Register>.
 
 Official plotting protocol / 官方绘图协议:
 - The only standard save API is save_figure(output_path).
@@ -212,7 +214,7 @@ def build_reviewer_prompt(review_mode: str, *, focus_major_issues: bool = False)
 - Verify that any knowledge-based explanation grounded in retrieved evidence includes at least one inline citation label taken from the supplied evidence register.
 - Reject if the report uses an inline citation label that does not appear in the supplied evidence register.
 - Reject if a cited evidence label is clearly mismatched with the claim it is supposed to support.
-- Verify that the report does not clearly violate stable project-level preferences or reviewer constraints supplied in the project memory context.
+- Verify that the report does not clearly violate stable preferences from success memory or negative constraints from failure memory.
 """
         decision_policy = """Decision policy:
 - Return "Accept" only if the report is publication-grade, internally coherent, statistically defensible, and adequately grounded in the supplied evidence.
@@ -231,7 +233,7 @@ def build_reviewer_prompt(review_mode: str, *, focus_major_issues: bool = False)
 - Verify that any knowledge-based explanation grounded in retrieved evidence includes at least one inline citation label taken from the supplied evidence register.
 - Reject if the report uses an inline citation label that does not appear in the supplied evidence register.
 - Reject if a cited evidence label is clearly mismatched with the claim it is supposed to support.
-- Verify that the report does not clearly violate stable project-level preferences or reviewer constraints supplied in the project memory context.
+- Verify that the report does not clearly violate stable preferences from success memory or negative constraints from failure memory.
 """
         decision_policy = """Decision policy:
 - Return "Accept" only if the report is coherent, well-supported, and free of major technical, logical, or artifact issues.

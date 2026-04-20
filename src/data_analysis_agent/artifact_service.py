@@ -18,6 +18,7 @@ from .runtime_models import (
     ArtifactValidationResult,
     ReviewRecord,
     RunContext,
+    StageExecutionAuditResult,
     VisualReviewRecord,
     WorkflowState,
 )
@@ -79,6 +80,7 @@ def validate_artifacts(
     report_path: Path,
     trace_path: Path,
     telemetry: ReportTelemetry,
+    execution_audit: StageExecutionAuditResult | None = None,
 ) -> ArtifactValidationResult:
     missing_artifacts: list[str] = []
     warnings: list[str] = []
@@ -100,8 +102,14 @@ def validate_artifacts(
         warnings.append("Telemetry cleaned_data_path does not match the canonical run artifact path.")
     if not telemetry.valid:
         warnings.append("Final report telemetry block is missing or malformed.")
+    active_audit = execution_audit or StageExecutionAuditResult(status="not_checked")
+    stage_contract_findings = tuple(finding.message for finding in active_audit.findings)
+    stage_contract_passed = active_audit.passed if execution_audit is not None else True
+    if execution_audit is not None and not active_audit.passed:
+        warnings.append(f"Stage execution audit did not pass: {active_audit.status}.")
+        warnings.extend(stage_contract_findings)
 
-    workflow_complete = cleaned_data_exists and report_exists and trace_exists and telemetry.valid
+    workflow_complete = cleaned_data_exists and report_exists and trace_exists and telemetry.valid and stage_contract_passed
     if not workflow_complete:
         warnings.append("This run did not complete the production-grade artifact contract.")
 
@@ -112,6 +120,9 @@ def validate_artifacts(
         cleaned_data_exists=cleaned_data_exists,
         report_exists=report_exists,
         trace_exists=trace_exists,
+        stage_contract_status=active_audit.status,
+        stage_contract_findings=stage_contract_findings,
+        stage_contract_passed=stage_contract_passed,
     )
 
 
@@ -170,9 +181,13 @@ def save_agent_trace(
     event_stream: tuple[AgentEvent, ...] = (),
     rag_payload: dict[str, object] | None = None,
     memory_payload: dict[str, object] | None = None,
+    failure_memory_payload: dict[str, object] | None = None,
+    execution_audit: StageExecutionAuditResult | None = None,
 ) -> Path:
     active_rag_payload = dict(rag_payload or {})
     active_memory_payload = dict(memory_payload or {})
+    active_failure_memory_payload = dict(failure_memory_payload or {})
+    active_execution_audit = execution_audit or StageExecutionAuditResult(status="not_checked")
     payload = {
         "run_metadata": {
             "timestamp": datetime.now().isoformat(timespec="seconds"),
@@ -195,9 +210,12 @@ def save_agent_trace(
             "vision_configured": vision_configured,
             "rag_enabled": bool(active_rag_payload.get("enabled", False)),
             "rag_status": str(active_rag_payload.get("status", "disabled")),
+            "knowledge_paths": list(active_rag_payload.get("knowledge_paths", [])),
             "memory_enabled": bool(active_memory_payload.get("enabled", False)),
             "memory_scope_key": str(active_memory_payload.get("scope_key", "")),
             "memory_writeback_status": str(active_memory_payload.get("writeback_status", "disabled")),
+            "failure_memory_enabled": bool(active_failure_memory_payload.get("enabled", False)),
+            "failure_memory_writeback_status": str(active_failure_memory_payload.get("writeback_status", "disabled")),
         },
         "workflow_states": [state.value if isinstance(state, WorkflowState) else str(state) for state in workflow_states],
         "event_stream": [event.to_dict() for event in event_stream],
@@ -207,6 +225,7 @@ def save_agent_trace(
                 "round_index": round_record.round_index,
                 "report_path": round_record.report_path.as_posix(),
                 "step_traces": [asdict(trace) for trace in round_record.step_traces],
+                "execution_audit": round_record.execution_audit.to_trace_dict(),
             }
             for round_record in analysis_rounds
         ],
@@ -254,13 +273,29 @@ def save_agent_trace(
             "cleaned_data_exists": artifact_validation.cleaned_data_exists,
             "report_exists": artifact_validation.report_exists,
             "trace_exists": artifact_validation.trace_exists,
+            "stage_contract_status": artifact_validation.stage_contract_status,
+            "stage_contract_findings": list(artifact_validation.stage_contract_findings),
+            "stage_contract_passed": artifact_validation.stage_contract_passed,
         },
+        "execution_audit": active_execution_audit.to_trace_dict(),
         "search_status": search_status,
         "review_status": review_status,
         "timing_breakdown": dict(timing_breakdown),
         "rag": active_rag_payload,
         "memory": active_memory_payload,
+        "success_memory": active_memory_payload,
+        "failure_memory": active_failure_memory_payload,
     }
     trace_path.parent.mkdir(parents=True, exist_ok=True)
     trace_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return trace_path
+
+
+def save_run_summary(
+    *,
+    summary_path: Path,
+    payload: dict[str, object],
+) -> Path:
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return summary_path

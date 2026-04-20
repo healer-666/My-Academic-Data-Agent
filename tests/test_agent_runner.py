@@ -23,14 +23,27 @@ from data_analysis_agent.agent_runner import (
 )
 from data_analysis_agent.config import RuntimeConfig
 from data_analysis_agent.data_context import DataContextSummary
-from data_analysis_agent.memory import MemoryRecord, MemoryRetrievalResult, MemoryWriteResult
+from data_analysis_agent.memory import (
+    FailureMemoryRecord,
+    FailureMemoryRetrievalResult,
+    FailureMemoryWriteResult,
+    MemoryRecord,
+    MemoryRetrievalResult,
+    MemoryWriteResult,
+)
 from data_analysis_agent.prompts import build_system_prompt
 from data_analysis_agent.rag.models import RagIndexResult, RagRetrievalResult, RetrievedChunk
 from data_analysis_agent.rag.query_builder import RetrievalQueryBundle
 from data_analysis_agent.reporting import EvidenceCoverage, ReportTelemetry
 
 
-def _finish_report(body: str, *, domain: str = "generic tabular data", cleaned: bool = False) -> str:
+def _finish_report(
+    body: str,
+    *,
+    domain: str = "generic tabular data",
+    cleaned: bool = False,
+    cleaned_data_path: str = "",
+) -> str:
     telemetry = {
         "methods": [],
         "domain": domain,
@@ -38,7 +51,7 @@ def _finish_report(body: str, *, domain: str = "generic tabular data", cleaned: 
         "search_used": False,
         "search_notes": "not triggered",
         "cleaned_data_saved": cleaned,
-        "cleaned_data_path": "placeholder" if cleaned else "",
+        "cleaned_data_path": cleaned_data_path if cleaned_data_path else ("placeholder" if cleaned else ""),
         "figures_generated": [],
     }
     return f"# Data Analysis Report\n\n{body}\n\n<telemetry>{json.dumps(telemetry)}</telemetry>"
@@ -147,6 +160,48 @@ class FakeMemoryService:
         return MemoryWriteResult(status="written", written_records=tuple(records))
 
 
+class FakeFailureMemoryService:
+    records = (
+        FailureMemoryRecord(
+            memory_id="failure-1",
+            memory_scope_key="project-alpha",
+            failure_type="failure_constraint",
+            run_id="run_previous_failed",
+            source_report_path="outputs/run_previous_failed/final_report.md",
+            source_trace_path="outputs/run_previous_failed/logs/agent_trace.json",
+            detected_domain="biomedicine",
+            quality_mode="standard",
+            created_at="2026-04-05T12:00:00",
+            review_status="rejected",
+            workflow_complete=False,
+            execution_audit_status="failed",
+            trigger_stage="review",
+            text="Do not finish while reviewer-blocking issues remain unresolved.",
+            avoidance_rule="Resolve reviewer-blocking issues before finish.",
+            source_names=("guideline.md",),
+        ),
+    )
+    last_written_run_id = ""
+
+    def __init__(self, *, runtime_config, memory_base_dir=None):
+        self.runtime_config = runtime_config
+
+    def retrieve(self, *, memory_scope_key, user_query, data_context, top_k=4):
+        return FailureMemoryRetrievalResult(
+            status="retrieved",
+            memory_scope_key=memory_scope_key,
+            retrieval_query="query",
+            records=self.records,
+        )
+
+    def format_for_prompt(self, records, *, max_chars=2200):
+        return "\n".join(record.text for record in records)
+
+    def write_records(self, *, records, run_id):
+        self.__class__.last_written_run_id = run_id
+        return FailureMemoryWriteResult(status="written", written_records=tuple(records))
+
+
 class AgentRunnerTests(unittest.TestCase):
     def _workspace_case_dir(self) -> Path:
         base_dir = PROJECT_ROOT / "tool-output" / "test-temp"
@@ -201,6 +256,7 @@ class AgentRunnerTests(unittest.TestCase):
         self.assertEqual(len(traces), 3)
         self.assertEqual(traces[0].tool_name, "TavilySearchTool")
         self.assertEqual(traces[1].tool_name, "PythonInterpreterTool")
+        self.assertEqual(traces[1].tool_input, "print(1)")
 
     def test_run_analysis_rejects_non_tabular_input(self):
         tmp_path = self._workspace_case_dir()
@@ -231,7 +287,7 @@ class AgentRunnerTests(unittest.TestCase):
         data_path.write_text("a,b\n1,2\n", encoding="utf-8")
         llm = StubLLM([json.dumps({"decision": "Done", "action": "finish", "tool_name": "", "tool_input": "", "final_answer": _finish_report("Tabular mode.")})])
 
-        with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=self._runtime_config()), patch(
+        with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=self._runtime_config(embedding=True)), patch(
             "data_analysis_agent.agent_runner.build_llm", return_value=llm
         ), patch(
             "data_analysis_agent.agent_runner.build_tool_registry", return_value=StubRegistry(cleaned_data_path=None)
@@ -243,6 +299,9 @@ class AgentRunnerTests(unittest.TestCase):
         trace_payload = json.loads(result.trace_path.read_text(encoding="utf-8"))
         self.assertEqual(trace_payload["run_metadata"]["input_kind"], "tabular")
         self.assertEqual(trace_payload["document_ingestion"]["status"], "not_needed")
+        run_summary_payload = json.loads((result.run_dir / "run_summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(run_summary_payload["run_id"], result.run_dir.name)
+        self.assertIn("execution_audit_status", run_summary_payload)
 
     def test_build_reviewer_task_includes_generated_artifact_evidence(self):
         data_context = DataContextSummary(
@@ -312,9 +371,45 @@ class AgentRunnerTests(unittest.TestCase):
         tmp_path = self._workspace_case_dir()
         data_path = tmp_path / "sample.csv"
         data_path.write_text("marker_a,marker_b\n1,2\n", encoding="utf-8")
+        fixed_run_dir = tmp_path / "outputs" / "run_fixed"
+        (fixed_run_dir / "data").mkdir(parents=True, exist_ok=True)
+        (fixed_run_dir / "figures").mkdir(parents=True, exist_ok=True)
+        (fixed_run_dir / "logs").mkdir(parents=True, exist_ok=True)
+        fixed_cleaned_path = fixed_run_dir / "data" / "cleaned_data.csv"
         llm = StubLLM(
             [
-                json.dumps({"decision": "Done", "action": "finish", "tool_name": "", "tool_input": "", "final_answer": _finish_report("Memory mode.", domain="biomedicine")}),
+                json.dumps(
+                    {
+                        "decision": "Stage 1 save cleaned data",
+                        "action": "call_tool",
+                        "tool_name": "PythonInterpreterTool",
+                        "tool_input": f'import pandas as pd\ndf = pd.read_csv(r"{data_path.as_posix()}")\ndf.to_csv(r"{fixed_cleaned_path.as_posix()}", index=False)\nprint("saved")',
+                        "final_answer": "",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "decision": "Stage 2 reload cleaned data",
+                        "action": "call_tool",
+                        "tool_name": "PythonInterpreterTool",
+                        "tool_input": f'import pandas as pd\ndf = pd.read_csv(r"{fixed_cleaned_path.as_posix()}")\nprint(df.shape)',
+                        "final_answer": "",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "decision": "Done",
+                        "action": "finish",
+                        "tool_name": "",
+                        "tool_input": "",
+                        "final_answer": _finish_report(
+                            "Memory mode.",
+                            domain="biomedicine",
+                            cleaned=True,
+                            cleaned_data_path=fixed_cleaned_path.as_posix(),
+                        ),
+                    }
+                ),
                 '{"decision":"Accept","critique":"Looks good."}',
             ]
         )
@@ -323,9 +418,19 @@ class AgentRunnerTests(unittest.TestCase):
         with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=self._runtime_config(embedding=True)), patch(
             "data_analysis_agent.agent_runner.build_llm", return_value=llm
         ), patch(
-            "data_analysis_agent.agent_runner.build_tool_registry", return_value=StubRegistry(cleaned_data_path=None)
+            "data_analysis_agent.agent_runner.build_tool_registry", return_value=StubRegistry(cleaned_data_path=fixed_cleaned_path)
+        ), patch(
+            "data_analysis_agent.agent_runner._create_run_directory",
+            return_value=(
+                fixed_run_dir,
+                fixed_run_dir / "data",
+                fixed_run_dir / "figures",
+                fixed_run_dir / "logs",
+            ),
         ), patch(
             "data_analysis_agent.agent_runner.ProjectMemoryService", FakeMemoryService
+        ), patch(
+            "data_analysis_agent.agent_runner.FailureMemoryService", FakeFailureMemoryService
         ), patch(
             "data_analysis_agent.agent_runner.extract_memory_records", return_value=SimpleNamespace(records=FakeMemoryService.records, llm_distilled=False, warnings=())
         ):
@@ -334,7 +439,63 @@ class AgentRunnerTests(unittest.TestCase):
         self.assertEqual(result.memory_scope_key, "project-alpha")
         self.assertEqual(result.memory_writeback_status, "written")
         self.assertEqual(result.memory_written_count, 1)
+        self.assertEqual(result.failure_memory_writeback_status, "not_applicable")
+        self.assertEqual(result.execution_audit_status, "passed")
+        self.assertTrue(result.execution_audit_passed)
         self.assertTrue(FakeMemoryService.last_written_run_id.startswith("run_"))
+
+    def test_run_analysis_hard_rejects_stage_contract_failure_before_reviewer(self):
+        tmp_path = self._workspace_case_dir()
+        data_path = tmp_path / "sample.csv"
+        data_path.write_text("a,b\n1,2\n", encoding="utf-8")
+        fixed_run_dir = tmp_path / "outputs" / "run_fixed_failure"
+        (fixed_run_dir / "data").mkdir(parents=True, exist_ok=True)
+        (fixed_run_dir / "figures").mkdir(parents=True, exist_ok=True)
+        (fixed_run_dir / "logs").mkdir(parents=True, exist_ok=True)
+        llm = StubLLM(
+            [
+                json.dumps(
+                    {
+                        "decision": "Finish without using cleaned dataset",
+                        "action": "finish",
+                        "tool_name": "",
+                        "tool_input": "",
+                        "final_answer": _finish_report("Failure mode.", domain="demo"),
+                    }
+                )
+            ]
+        )
+
+        with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=self._runtime_config(embedding=True)), patch(
+            "data_analysis_agent.agent_runner.build_llm", return_value=llm
+        ), patch(
+            "data_analysis_agent.agent_runner.build_tool_registry", return_value=StubRegistry(cleaned_data_path=None)
+        ), patch(
+            "data_analysis_agent.agent_runner.FailureMemoryService", FakeFailureMemoryService
+        ), patch(
+            "data_analysis_agent.agent_runner.extract_failure_memory_records",
+            return_value=SimpleNamespace(records=FakeFailureMemoryService.records, warnings=()),
+        ), patch(
+            "data_analysis_agent.agent_runner._create_run_directory",
+            return_value=(
+                fixed_run_dir,
+                fixed_run_dir / "data",
+                fixed_run_dir / "figures",
+                fixed_run_dir / "logs",
+            ),
+        ):
+            result = run_analysis(
+                data_path,
+                output_dir=tmp_path / "outputs",
+                quality_mode="standard",
+                max_reviews=0,
+            )
+
+        self.assertEqual(result.execution_audit_status, "skipped")
+        self.assertFalse(result.execution_audit_passed)
+        self.assertEqual(result.review_status, "max_reviews_reached")
+        self.assertIn("阶段执行审计未通过", result.review_critique)
+        self.assertEqual(result.failure_memory_writeback_status, "written")
 
 
 if __name__ == "__main__":
