@@ -1,0 +1,27 @@
+{
+  "task_id": "two_group_small_sample",
+  "title": "两组小样本实验比较",
+  "data_path": "data/eval/two_group_small_sample.csv",
+  "question": "比较 control 组和 intervention 组在 day7 的 score 是否存在明显差异，生成图表并给出保守解释。",
+  "task_type": "two_group_small_sample",
+  "quality_mode": "standard",
+  "latency_mode": "auto",
+  "use_rag": false,
+  "use_memory": false,
+  "memory_scope_key": "seed-two-group-scope",
+  "expected_methods": ["descriptive_statistics", "group_comparison"],
+  "key_checks": [
+    "must_workflow_complete",
+    "must_create_cleaned_data",
+    "must_pass_execution_audit",
+    "must_generate_report",
+    "must_generate_trace",
+    "must_generate_at_least_one_chart"
+  ],
+  "manual_expectations": [
+    "不能把组间差异直接写成因果",
+    "必须说明样本量较小的限制"
+  ],
+  "common_failures": ["review_rejection"],
+  "notes": "用于测分组统计、保守结论和小样本表述。"
+}

@@ -1,0 +1,27 @@
+{
+  "task_id": "mixed_units_and_dirty_headers",
+  "title": "字段名混乱与单位风格不规整",
+  "data_path": "data/eval/mixed_units_and_dirty_headers.csv",
+  "question": "清洗这份字段名不规整的实验记录，分析 Dose、Resp Rate 和 temp_C 在 control 与 treated 两组中的差异，并生成图表。",
+  "task_type": "mixed_units_and_dirty_headers",
+  "quality_mode": "standard",
+  "latency_mode": "auto",
+  "use_rag": false,
+  "use_memory": false,
+  "memory_scope_key": "eval-default",
+  "expected_methods": ["schema_cleaning", "descriptive_statistics"],
+  "key_checks": [
+    "must_workflow_complete",
+    "must_create_cleaned_data",
+    "must_pass_execution_audit",
+    "must_generate_report",
+    "must_generate_trace",
+    "must_generate_at_least_one_chart"
+  ],
+  "manual_expectations": [
+    "主链必须先清洗落盘再分析",
+    "不能因为字段名混乱就省略对变量含义的说明"
+  ],
+  "common_failures": ["cleaning_contract_failure"],
+  "notes": "用于测字段理解、清洗契约和主链鲁棒性。"
+}

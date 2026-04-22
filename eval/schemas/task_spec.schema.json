@@ -7,6 +7,7 @@
     "task_id": {"type": "string"},
     "title": {"type": "string"},
     "data_path": {"type": "string"},
+    "knowledge_paths": {"type": "array", "items": {"type": "string"}},
     "question": {"type": "string"},
     "task_type": {"type": "string"},
     "quality_mode": {"type": "string"},

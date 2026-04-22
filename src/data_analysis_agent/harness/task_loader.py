@@ -51,11 +51,15 @@ def load_task_spec(path: str | Path, *, project_root: str | Path | None = None) 
     if invalid_checks:
         raise ValueError(f"Task spec contains unsupported key checks {invalid_checks}: {spec_path.as_posix()}")
     resolved_data_path = (root / str(payload["data_path"])).resolve()
+    knowledge_paths = tuple(str(item).strip() for item in payload.get("knowledge_paths", []) if str(item).strip())
+    resolved_knowledge_paths = tuple((root / item).resolve() for item in knowledge_paths)
     return TaskSpec(
         task_id=str(payload["task_id"]).strip(),
         title=str(payload["title"]).strip(),
         data_path=str(payload["data_path"]).strip(),
         resolved_data_path=resolved_data_path,
+        knowledge_paths=knowledge_paths,
+        resolved_knowledge_paths=resolved_knowledge_paths,
         question=str(payload["question"]).strip(),
         task_type=str(payload["task_type"]).strip(),
         quality_mode=str(payload.get("quality_mode", "standard")).strip() or "standard",

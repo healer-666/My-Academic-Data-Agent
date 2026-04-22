@@ -1,0 +1,27 @@
+{
+  "task_id": "memory_constrained_repeat_task",
+  "title": "带历史约束的重复结构任务",
+  "data_path": "data/eval/memory_constrained_repeat_task.csv",
+  "question": "比较 control 和 intervention 在 day14 的 score 差异，并解释干预是否有效，但必须保持表述保守。",
+  "task_type": "memory_constrained_repeat_task",
+  "quality_mode": "standard",
+  "latency_mode": "auto",
+  "use_rag": false,
+  "use_memory": true,
+  "memory_scope_key": "seed-two-group-scope",
+  "expected_methods": ["descriptive_statistics", "group_comparison"],
+  "key_checks": [
+    "must_workflow_complete",
+    "must_create_cleaned_data",
+    "must_pass_execution_audit",
+    "must_generate_report",
+    "must_generate_trace",
+    "must_generate_at_least_one_chart"
+  ],
+  "manual_expectations": [
+    "不能把干预是否有效直接写成已经被证明",
+    "如果命中历史约束，应延续保守写法"
+  ],
+  "common_failures": ["review_rejection"],
+  "notes": "用于测 Memory 约束链路；若 scope 已有成功经验或失败教训，效果会更明显。"
+}

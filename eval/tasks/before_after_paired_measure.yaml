@@ -1,0 +1,27 @@
+{
+  "task_id": "before_after_paired_measure",
+  "title": "干预前后配对测量",
+  "data_path": "data/eval/before_after_paired_measure.csv",
+  "question": "分析同一批对象在 pre 和 post 两个阶段的 biomarker_value 变化，并说明这是配对数据。",
+  "task_type": "before_after_paired_measure",
+  "quality_mode": "standard",
+  "latency_mode": "auto",
+  "use_rag": false,
+  "use_memory": false,
+  "memory_scope_key": "eval-default",
+  "expected_methods": ["paired_comparison", "descriptive_statistics"],
+  "key_checks": [
+    "must_workflow_complete",
+    "must_create_cleaned_data",
+    "must_pass_execution_audit",
+    "must_generate_report",
+    "must_generate_trace",
+    "must_generate_at_least_one_chart"
+  ],
+  "manual_expectations": [
+    "报告中必须明确这是配对结构",
+    "不能把前后差异夸写成长期因果结论"
+  ],
+  "common_failures": ["review_rejection"],
+  "notes": "用于测配对数据意识和前后图表解释。"
+}

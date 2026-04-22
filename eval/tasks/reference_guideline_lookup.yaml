@@ -1,0 +1,28 @@
+{
+  "task_id": "reference_guideline_lookup",
+  "title": "参考资料辅助的指标解释",
+  "data_path": "data/eval/reference_guideline_lookup.csv",
+  "knowledge_paths": ["data/eval/references/reference_guideline_lookup.md"],
+  "question": "结合本地参考资料，解释 control 和 treated 两组 Marker-L 的水平差异，并在报告中给出带引用的保守说明。",
+  "task_type": "reference_guideline_lookup",
+  "quality_mode": "standard",
+  "latency_mode": "auto",
+  "use_rag": true,
+  "use_memory": false,
+  "memory_scope_key": "eval-rag-demo",
+  "expected_methods": ["descriptive_statistics", "reference_grounded_interpretation"],
+  "key_checks": [
+    "must_workflow_complete",
+    "must_create_cleaned_data",
+    "must_pass_execution_audit",
+    "must_generate_report",
+    "must_generate_trace",
+    "must_generate_at_least_one_chart"
+  ],
+  "manual_expectations": [
+    "必须引用本地参考资料",
+    "不能把参考资料中的解释写成数据已经证明的因果结论"
+  ],
+  "common_failures": ["citation_evidence_failure"],
+  "notes": "用于测轻量 RAG、引用和 evidence register。"
+}

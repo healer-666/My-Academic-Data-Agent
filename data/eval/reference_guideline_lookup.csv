@@ -1,0 +1,13 @@
+group,marker_level,visit
+control,1.8,baseline
+control,1.9,baseline
+control,2.0,week4
+control,1.9,week4
+control,2.1,week8
+control,2.0,week8
+treated,2.7,baseline
+treated,2.8,baseline
+treated,2.9,week4
+treated,3.0,week4
+treated,3.1,week8
+treated,3.0,week8

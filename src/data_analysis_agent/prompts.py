@@ -77,6 +77,7 @@ Stage 1 - Data Cleaning and Preprocessing:
 
 Stage 2 - Statistical Analysis and Visualization:
 - After Stage 1 succeeds, write new Python code that re-loads the cleaned dataset from `{cleaned_data_path}`.
+- The Stage 2 reload must happen in a later Python step. Do not save and reload the canonical cleaned_data.csv in one combined controller step and then immediately finish.
 - All statistical analysis, hypothesis testing, and plotting must use the cleaned dataset as the primary input.
 - Save all generated figures under `{figures_dir}` only.
 - Do not save figures outside the run directory.
@@ -88,10 +89,21 @@ Academic Guardrails / 统计学汇报规范:
 - If you compare more than 2 groups and perform pairwise comparisons, you must apply Bonferroni correction or Tukey HSD in code and state the correction method explicitly in the report.
 - If data_context contains a small-sample warning, treat it as a serious methodological constraint. Prefer non-parametric tests such as Mann-Whitney U or Kruskal-Wallis unless you have a strong printed justification for parametric assumptions.
 - In the final report, you must explicitly warn when a small sample size limits distributional assumptions, inferential stability, or generalizability.
+- If the dataset is paired, repeated-measures, or pre/post on the same subject, you must state that structure explicitly in Methods and use a paired or repeated-measures method instead of treating rows as independent groups.
+- If malformed headers were normalized, missing values were handled, or outliers were retained, excluded, or flagged, the report must state that cleaning choice explicitly.
 - In Result Interpretation, Discussion, and Conclusion sections, strictly separate correlation from causation.
 - Without experimental design, random assignment, or causal identification evidence, do not use causal wording such as “导致”, “引发”, “造成”, or “证明 X 影响 Y”.
 - Use non-causal wording such as “相关”, “关联”, “差异”, “提示”, or “可能有关”.
 - If your observations do not contain effect sizes, confidence intervals, or the required multiple-comparison correction details, the analysis is not ready to finish.
+- If you generate a figure, the final report must explain what that figure shows and why it matters. Do not finish with bare image references and no textual interpretation.
+- Use a stable report structure that the reviewer can verify quickly.
+- The final report must contain these sections in order, using either Chinese or English headings that are easy to recognize: Data Overview / 数据概览, Data Cleaning Notes / 数据清洗说明, Methods / 方法说明, Core Statistical Results / 主要统计结果, Figure Interpretation / 图表解释, Limitations / 局限性, Conclusion / 结论.
+- The Figure Interpretation section must include 1-3 direct sentences for every cited figure. Do not place a figure reference in the report without an adjacent interpretation sentence.
+- The Limitations section must mention at least one concrete boundary such as small sample size, non-causal interpretation, missing-value handling impact, outlier sensitivity, or paired/multi-group interpretation limits.
+- For a two-group comparison, explicitly write the observed difference, the sample-size or design limitation, and a non-causal interpretation.
+- For paired or pre-post data, explicitly write that the same subjects were measured before and after, and interpret the result as within-subject change.
+- For time-trend data, explicitly write that the report describes the observed trend only and does not establish mechanism or intervention effect.
+- For outlier-sensitive data, explicitly write how outliers were handled and whether the conclusion depends on them.
 
 Hard prohibitions:
 - Do not analyze the raw dataset before saving cleaned_data.csv.
@@ -124,6 +136,7 @@ Execution rules:
 22. Neither success memory nor failure memory is direct evidence for the current dataset. If memory conflicts with the current data or retrieved evidence, follow the current data and current evidence.
 23. Failure memory is for guardrails only. Do not use it as domain knowledge, factual support, or a substitute for computation.
 24. Do not cite success memory or failure memory as if they were retrieved evidence. Inline citations may only use labels from <Retrieved_Evidence_Register>.
+25. Before action "finish", run a self-check: the canonical cleaned_data.csv was saved in Stage 1, explicitly reloaded in a later Python step, every cited figure has a direct interpretation sentence, and the report states the main limitation or interpretation boundary.
 
 Official plotting protocol / 官方绘图协议:
 - The only standard save API is save_figure(output_path).
@@ -179,6 +192,15 @@ Validation rules:
 - The telemetry block must appear only once, at the very end, after the Markdown report body.
 - The telemetry block must reflect actual tool usage and real analysis steps. Do not fabricate methods, domain, search usage, or artifact paths.
 - The final Markdown report must include:
+  - Data Overview / 数据概览
+  - Data Cleaning Notes / 数据清洗说明
+  - Methods / 方法说明
+  - Core Statistical Results / 主要统计结果
+  - Figure Interpretation / 图表解释
+  - Limitations / 局限性
+  - Conclusion / 结论
+  - Cleaned-data path disclosure
+  - Figure references such as ![figure]({figures_dir}/chart.png)
   - 数据概览
   - 方法说明
   - 统计学治理说明
@@ -204,7 +226,11 @@ def build_reviewer_prompt(review_mode: str, *, focus_major_issues: bool = False)
         reviewer_role = "You are an exceptionally strict reviewer from a top-tier journal ecosystem such as Nature, Science, or Cell."
         checklist = """Review checklist:
 - Verify that figure references are present, coherent, and point to this run's actual figure paths.
+- Reject immediately if the report cites a figure but does not explain what that figure shows in direct prose.
 - If Generated artifacts evidence confirms that figures were saved in this run and artifact validation is green, do not reject solely because the compressed execution trace omits plotting details.
+- Reject immediately if the report contains statistical testing but omits a clear cleaning note or omits a limitations section.
+- Reject immediately if a paired / before-after task does not state that the same subjects were measured repeatedly.
+- Reject immediately if a missing-value or outlier-sensitive task does not describe the handling strategy.
 - Verify that any hypothesis test is reported with the test statistic, p-value, effect size, and 95% CI together.
 - Verify that multi-group pairwise comparisons explicitly mention Bonferroni correction or Tukey HSD when required.
 - Verify that the report does not confuse correlation with causation.
@@ -225,7 +251,11 @@ def build_reviewer_prompt(review_mode: str, *, focus_major_issues: bool = False)
         reviewer_role = "You are a rigorous reviewer for a high-quality technical or academic report."
         checklist = """Review checklist:
 - Verify that figure references are present, coherent, and point to this run's actual figure paths.
+- Reject immediately if the report cites a figure but does not explain what that figure shows in direct prose.
 - If Generated artifacts evidence confirms that figures were saved in this run and artifact validation is green, do not reject solely because the compressed execution trace omits plotting details.
+- Reject immediately if the report contains statistical testing but omits a clear cleaning note or omits a limitations section.
+- Reject immediately if a paired / before-after task does not state that the same subjects were measured repeatedly.
+- Reject immediately if a missing-value or outlier-sensitive task does not describe the handling strategy.
 - Verify that major hypothesis tests are not reported as isolated p-values.
 - Verify that there are no obvious logical errors, broken artifact references, or contradictions with the execution trace.
 - Verify that the report does not confuse correlation with causation in a plainly misleading way.
@@ -257,6 +287,8 @@ One-pass review principle:
 - You must list all major visible rejection reasons in this round.
 - Do not intentionally hold back major problems for a later round if they are already visible now.
 - Your critique must be structured as an actionable numbered list so that the analyst can respond point by point.
+- Focus on missing structure, missing explanation, and missing task alignment before style polish.
+- Prefer critique items such as "缺少清洗说明", "缺少局限性", "图表已引用但未解释", "未说明配对结构", and "未说明缺失值/异常值处理" over vague phrases.
 {focus_block}
 
 {decision_policy}
@@ -322,7 +354,9 @@ def build_observation_prompt(
 Read the observation carefully.
 - If the tool returned an error or incomplete result, fix your Python code or revise the search query and call the tool again.
 - If Stage 1 has not yet saved cleaned_data.csv successfully, do not move to Stage 2.
+- If the latest visible evidence does not prove that a later Python step explicitly reloaded the canonical cleaned_data.csv path, do not finish yet.
 - If you already ran hypothesis tests but the observation does not show effect sizes, 95% CIs, or the required multiple-comparison correction details, do not finish yet.
+- If the report would contain figure references without direct textual interpretation, do not finish yet.
 - If the statistical analysis is complete and defensible, return action "finish" with the full Markdown report plus the required trailing telemetry block.
 {fast_path_hint}- The observation above is intentionally compressed. Do not assume omitted text means omitted evidence; use the visible summary and your own prior steps to decide the next action.
 - Remaining controller steps: {remaining_steps}

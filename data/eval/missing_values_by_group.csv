@@ -1,0 +1,17 @@
+group,score_a,score_b
+control,78,82
+control,80,83
+control,79,
+control,81,84
+control,,82
+control,77,81
+control,82,85
+control,80,84
+treatment,85,88
+treatment,86,89
+treatment,87,
+treatment,88,91
+treatment,,90
+treatment,84,87
+treatment,89,92
+treatment,87,90

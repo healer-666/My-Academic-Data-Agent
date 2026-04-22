@@ -32,6 +32,7 @@ from data_analysis_agent.memory import (
     MemoryWriteResult,
 )
 from data_analysis_agent.prompts import build_system_prompt
+from data_analysis_agent.review_service import _inspect_report_structure
 from data_analysis_agent.rag.models import RagIndexResult, RagRetrievalResult, RetrievedChunk
 from data_analysis_agent.rag.query_builder import RetrievalQueryBundle
 from data_analysis_agent.reporting import EvidenceCoverage, ReportTelemetry
@@ -333,7 +334,17 @@ class AgentRunnerTests(unittest.TestCase):
 
         reviewer_task = _build_reviewer_task(
             data_context=data_context,
-            report_markdown="# Report",
+            report_markdown=(
+                "# 数据概览\n"
+                "总体情况如下。\n\n"
+                "# 数据清洗说明\n"
+                "已说明缺失值处理。\n\n"
+                "# 图表解释\n"
+                "![chart](outputs/run_20260315_153022/figures/review_round_2/chart.png)\n"
+                "图 1 显示模型 precision 提升。\n\n"
+                "# 局限性\n"
+                "样本量较小。\n"
+            ),
             report_path=report_path,
             step_traces=(),
             artifact_validation=artifact_validation,
@@ -342,10 +353,32 @@ class AgentRunnerTests(unittest.TestCase):
             visual_review_summary="No major chart issues.",
             evidence_register=(RetrievedChunk(chunk_id="chunk-1", text="Guideline note.", source_name="guideline.md", source_path="memory/guideline.md", page_number=2),),
             evidence_coverage=EvidenceCoverage(status="missing_citations", citation_count=0, uncited_knowledge_sections_detected=("Discussion",)),
+            task_type="paired_measure",
+            task_expectations=("必须说明配对结构",),
         )
 
         self.assertIn("Generated artifacts evidence", reviewer_task)
         self.assertIn("chart.png", reviewer_task)
+        self.assertIn("Task alignment summary", reviewer_task)
+        self.assertIn("task_type: paired_measure", reviewer_task)
+        self.assertIn("必须说明配对结构", reviewer_task)
+
+    def test_report_structure_inspection_flags_missing_figure_explanation_and_limitations(self):
+        report_markdown = (
+            "# Data Overview\n"
+            "Quick overview.\n\n"
+            "# Data Cleaning Notes\n"
+            "Removed rows with missing values.\n\n"
+            "![figure](outputs/run/chart.png)\n"
+        )
+
+        inspection = _inspect_report_structure(report_markdown)
+
+        self.assertTrue(inspection["section_presence"]["data_overview"])
+        self.assertTrue(inspection["section_presence"]["cleaning_notes"])
+        self.assertFalse(inspection["section_presence"]["limitations"])
+        self.assertEqual(inspection["figure_reference_count"], 1)
+        self.assertEqual(inspection["figure_interpretation_hit_count"], 0)
 
     def test_run_analysis_injects_retrieved_knowledge_when_rag_enabled(self):
         tmp_path = self._workspace_case_dir()

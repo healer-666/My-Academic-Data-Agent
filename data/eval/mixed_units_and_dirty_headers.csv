@@ -1,0 +1,13 @@
+Grp ,Dose(mg),Resp Rate,temp_C,record_day
+control,5,18,36.7,1
+control,5,19,36.8,2
+control,5,18,36.6,3
+control,5,20,36.9,4
+control,10,18,36.7,5
+control,10,19,36.8,6
+treated,10,17,36.5,1
+treated,10,16,36.4,2
+treated,15,16,36.3,3
+treated,15,15,36.2,4
+treated,15,16,36.4,5
+treated,20,15,36.1,6

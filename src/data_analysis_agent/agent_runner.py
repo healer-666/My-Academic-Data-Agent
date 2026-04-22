@@ -775,6 +775,8 @@ def _build_reviewer_task(
     evidence_coverage=None,
     memory_context: str = "",
     execution_audit: StageExecutionAuditResult | None = None,
+    task_type: str = "",
+    task_expectations: tuple[str, ...] = (),
 ) -> str:
     return _build_reviewer_task_service(
         data_context=data_context,
@@ -789,6 +791,8 @@ def _build_reviewer_task(
         evidence_coverage=evidence_coverage,
         memory_context=memory_context,
         execution_audit=execution_audit,
+        task_type=task_type,
+        task_expectations=task_expectations,
     )
 
 
@@ -1126,6 +1130,8 @@ def run_analysis(
     knowledge_base_dir: str | Path | None = None,
     use_memory: bool = True,
     memory_scope_key: str | None = None,
+    task_type: str = "",
+    task_expectations: Iterable[str] = (),
 ) -> AnalysisRunResult:
     """Run the full data analysis workflow."""
 
@@ -1167,6 +1173,8 @@ def run_analysis(
     )
 
     source_path = Path(data_path).resolve()
+    resolved_task_type = str(task_type or "").strip()
+    resolved_task_expectations = tuple(str(item).strip() for item in task_expectations if str(item).strip())
     resolved_memory_scope_key = derive_memory_scope_key(
         explicit_scope_key=memory_scope_key,
         source_path=source_path,
@@ -2044,6 +2052,8 @@ def run_analysis(
                     evidence_coverage=evidence_coverage,
                     memory_context=combined_memory_context_text,
                     execution_audit=current_execution_audit,
+                    task_type=resolved_task_type,
+                    task_expectations=resolved_task_expectations,
                 ),
             },
         ]

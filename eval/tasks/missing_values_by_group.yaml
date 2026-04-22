@@ -1,0 +1,27 @@
+{
+  "task_id": "missing_values_by_group",
+  "title": "分组缺失值处理",
+  "data_path": "data/eval/missing_values_by_group.csv",
+  "question": "说明 control 和 treatment 两组在 score_a 与 score_b 上的缺失值情况，完成清洗后做基础分析并生成图表。",
+  "task_type": "missing_values_by_group",
+  "quality_mode": "standard",
+  "latency_mode": "auto",
+  "use_rag": false,
+  "use_memory": false,
+  "memory_scope_key": "eval-default",
+  "expected_methods": ["missing_value_check", "descriptive_statistics"],
+  "key_checks": [
+    "must_workflow_complete",
+    "must_create_cleaned_data",
+    "must_pass_execution_audit",
+    "must_generate_report",
+    "must_generate_trace",
+    "must_generate_at_least_one_chart"
+  ],
+  "manual_expectations": [
+    "报告必须说明缺失值存在及处理方式",
+    "不能跳过清洗说明直接下结论"
+  ],
+  "common_failures": ["cleaning_contract_failure"],
+  "notes": "用于测缺失值识别、清洗说明和清洗后分析。"
+}

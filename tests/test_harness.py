@@ -3,7 +3,10 @@ from __future__ import annotations
 import sys
 import unittest
 import uuid
+from dataclasses import replace
 from pathlib import Path
+
+import pandas as pd
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -16,6 +19,7 @@ from data_analysis_agent.harness import (
     aggregate_baseline_snapshot,
     build_eval_run_summary,
     build_run_summary_payload,
+    classify_failure_types,
     compare_baselines,
     load_baseline_snapshot,
     load_regression_rules,
@@ -115,15 +119,29 @@ class HarnessTests(unittest.TestCase):
         )
 
     def test_load_task_spec_accepts_json_style_yaml(self):
-        task = load_task_spec(PROJECT_ROOT / "eval" / "tasks" / "group_comparison_demo.yaml", project_root=PROJECT_ROOT)
-        self.assertEqual(task.task_id, "group_comparison_demo")
+        task = load_task_spec(PROJECT_ROOT / "eval" / "tasks" / "two_group_small_sample.yaml", project_root=PROJECT_ROOT)
+        self.assertEqual(task.task_id, "two_group_small_sample")
         self.assertTrue(task.resolved_data_path.name.endswith(".csv"))
         self.assertIn("must_pass_execution_audit", task.key_checks)
+
+    def test_all_seed_tasks_load_and_resolve_data(self):
+        task_dir = PROJECT_ROOT / "eval" / "tasks"
+        task_paths = sorted(path for path in task_dir.glob("*.yaml") if path.is_file())
+        self.assertEqual(len(task_paths), 10)
+        tasks = [load_task_spec(path, project_root=PROJECT_ROOT) for path in task_paths]
+
+        self.assertEqual(len(tasks), 10)
+        self.assertEqual(sum(1 for task in tasks if task.use_rag), 1)
+        self.assertEqual(sum(1 for task in tasks if task.use_memory), 1)
+        for task in tasks:
+            self.assertTrue(task.resolved_data_path.exists(), task.task_id)
+            frame = pd.read_csv(task.resolved_data_path)
+            self.assertFalse(frame.empty, task.task_id)
 
     def test_build_eval_run_summary_and_run_summary_payload(self):
         run_dir = self._workspace_case_dir() / "outputs" / "run_demo"
         result = self._build_result(run_dir)
-        task = load_task_spec(PROJECT_ROOT / "eval" / "tasks" / "group_comparison_demo.yaml", project_root=PROJECT_ROOT)
+        task = load_task_spec(PROJECT_ROOT / "eval" / "tasks" / "two_group_small_sample.yaml", project_root=PROJECT_ROOT)
 
         summary = build_eval_run_summary(task, result)
         payload = build_run_summary_payload(result)
@@ -138,7 +156,7 @@ class HarnessTests(unittest.TestCase):
         run_dir = self._workspace_case_dir() / "outputs" / "run_demo"
         accepted_result = self._build_result(run_dir / "accepted", accepted=True)
         failed_result = self._build_result(run_dir / "failed", accepted=False, with_figure=False)
-        task = load_task_spec(PROJECT_ROOT / "eval" / "tasks" / "group_comparison_demo.yaml", project_root=PROJECT_ROOT)
+        task = load_task_spec(PROJECT_ROOT / "eval" / "tasks" / "two_group_small_sample.yaml", project_root=PROJECT_ROOT)
 
         current_summary = build_eval_run_summary(task, accepted_result)
         baseline_summary = build_eval_run_summary(task, failed_result)
@@ -155,6 +173,39 @@ class HarnessTests(unittest.TestCase):
         self.assertEqual(loaded.baseline_name, "current")
         self.assertTrue(comparison["passed"])
         self.assertIn("Harness Baseline Comparison", markdown)
+
+    def test_reference_task_loads_knowledge_paths(self):
+        task = load_task_spec(PROJECT_ROOT / "eval" / "tasks" / "reference_guideline_lookup.yaml", project_root=PROJECT_ROOT)
+        self.assertTrue(task.use_rag)
+        self.assertEqual(len(task.knowledge_paths), 1)
+        self.assertTrue(task.resolved_knowledge_paths[0].name.endswith(".md"))
+
+    def test_failure_taxonomy_does_not_attach_reviewer_structure_failures_to_accepted_runs(self):
+        run_dir = self._workspace_case_dir() / "outputs" / "run_demo"
+        accepted_result = replace(
+            self._build_result(run_dir, accepted=True),
+            review_critique="图表已引用但未解释；缺少局限性说明。",
+        )
+
+        failure_types = classify_failure_types(accepted_result)
+
+        self.assertNotIn("figure_interpretation_failure", failure_types)
+        self.assertNotIn("report_structure_failure", failure_types)
+
+    def test_failure_taxonomy_maps_structure_and_figure_failures_for_rejected_runs(self):
+        run_dir = self._workspace_case_dir() / "outputs" / "run_demo"
+        failed_result = replace(
+            self._build_result(run_dir, accepted=False),
+            review_critique="1. 缺少清洗说明和局限性。2. 图表已引用但未解释。",
+            execution_audit_status="passed",
+            execution_audit_passed=True,
+        )
+
+        failure_types = classify_failure_types(failed_result)
+
+        self.assertIn("report_structure_failure", failure_types)
+        self.assertIn("figure_interpretation_failure", failure_types)
+        self.assertIn("review_rejection", failure_types)
 
 
 if __name__ == "__main__":

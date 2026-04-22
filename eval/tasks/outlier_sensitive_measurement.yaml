@@ -1,0 +1,27 @@
+{
+  "task_id": "outlier_sensitive_measurement",
+  "title": "异常值敏感测量",
+  "data_path": "data/eval/outlier_sensitive_measurement.csv",
+  "question": "比较 control 和 treatment 两组的 value，并判断是否存在异常值对结论产生明显影响，生成图表说明。",
+  "task_type": "outlier_sensitive_measurement",
+  "quality_mode": "standard",
+  "latency_mode": "auto",
+  "use_rag": false,
+  "use_memory": false,
+  "memory_scope_key": "eval-default",
+  "expected_methods": ["outlier_check", "group_comparison"],
+  "key_checks": [
+    "must_workflow_complete",
+    "must_create_cleaned_data",
+    "must_pass_execution_audit",
+    "must_generate_report",
+    "must_generate_trace",
+    "must_generate_at_least_one_chart"
+  ],
+  "manual_expectations": [
+    "不能忽略明显异常值的存在",
+    "图表解释要说明异常值可能带来的影响"
+  ],
+  "common_failures": ["chart_quality_failure"],
+  "notes": "用于测异常值识别、稳健描述和图表质量。"
+}

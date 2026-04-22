@@ -1,0 +1,15 @@
+sample_id,group,value
+P01,control,49
+P02,control,50
+P03,control,48
+P04,control,51
+P05,control,50
+P06,control,49
+P07,treatment,52
+P08,treatment,53
+P09,treatment,51
+P10,treatment,54
+P11,treatment,52
+P12,treatment,95
+P13,treatment,53
+P14,treatment,52

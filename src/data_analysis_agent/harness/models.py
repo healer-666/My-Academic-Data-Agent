@@ -15,6 +15,8 @@ class TaskSpec:
     resolved_data_path: Path
     question: str
     task_type: str
+    knowledge_paths: tuple[str, ...] = ()
+    resolved_knowledge_paths: tuple[Path, ...] = ()
     quality_mode: str = "standard"
     latency_mode: str = "auto"
     use_rag: bool = True
@@ -29,6 +31,7 @@ class TaskSpec:
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         payload["resolved_data_path"] = self.resolved_data_path.as_posix()
+        payload["resolved_knowledge_paths"] = [path.as_posix() for path in self.resolved_knowledge_paths]
         return payload
 
 

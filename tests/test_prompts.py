@@ -34,6 +34,12 @@ class PromptGuardrailTests(unittest.TestCase):
         self.assertIn("<Retrieved_Evidence_Register>", prompt)
         self.assertIn("<Success_Memory_Context>", prompt)
         self.assertIn("<Failure_Memory_Context>", prompt)
+        self.assertIn("later Python step", prompt)
+        self.assertIn("paired or repeated-measures", prompt)
+        self.assertIn("bare image references", prompt)
+        self.assertIn("Data Cleaning Notes / 数据清洗说明", prompt)
+        self.assertIn("Figure Interpretation / 图表解释", prompt)
+        self.assertIn("Limitations / 局限性", prompt)
 
     def test_system_prompt_can_include_background_literature_context(self):
         prompt = build_system_prompt(
@@ -59,6 +65,8 @@ class PromptGuardrailTests(unittest.TestCase):
         self.assertIn("effect sizes", prompt)
         self.assertIn("95% CIs", prompt)
         self.assertIn("do not finish yet", prompt)
+        self.assertIn("later Python step explicitly reloaded", prompt)
+        self.assertIn("figure references without direct textual interpretation", prompt)
 
     def test_reviewer_prompt_contains_review_contract(self):
         publication_prompt = build_reviewer_prompt("publication")
@@ -77,6 +85,11 @@ class PromptGuardrailTests(unittest.TestCase):
         self.assertIn("success memory", publication_prompt)
         self.assertIn("failure memory", publication_prompt)
         self.assertIn("evidence_findings", publication_prompt)
+        self.assertIn("cleaning note", publication_prompt)
+        self.assertIn("limitations section", publication_prompt)
+        self.assertIn("same subjects were measured repeatedly", publication_prompt)
+        self.assertIn("missing-value or outlier-sensitive task", publication_prompt)
+        self.assertIn("图表已引用但未解释", publication_prompt)
 
 
 if __name__ == "__main__":

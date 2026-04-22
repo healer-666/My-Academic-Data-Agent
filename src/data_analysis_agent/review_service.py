@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .data_context import DataContextSummary
-from .reporting import EvidenceCoverage, ReportTelemetry
+from .reporting import EvidenceCoverage, ReportTelemetry, _iter_markdown_sections
 from .rag.models import RetrievedChunk
 from .runtime_models import (
     AgentStepTrace,
@@ -20,6 +20,139 @@ from .runtime_models import (
     VisualReviewRecord,
 )
 from .vision_review import VisualReviewResult
+
+
+_REPORT_SECTION_HINTS: dict[str, tuple[str, ...]] = {
+    "data_overview": ("\u6570\u636e\u6982\u89c8", "data overview", "overview"),
+    "cleaning_notes": (
+        "\u6570\u636e\u6e05\u6d17",
+        "\u6e05\u6d17\u8bf4\u660e",
+        "data cleaning",
+        "cleaning notes",
+        "preprocessing",
+    ),
+    "methods": ("\u65b9\u6cd5\u8bf4\u660e", "methods", "method"),
+    "core_results": (
+        "\u4e3b\u8981\u7edf\u8ba1\u7ed3\u679c",
+        "\u6838\u5fc3\u7edf\u8ba1\u7ed3\u679c",
+        "results",
+        "statistical results",
+    ),
+    "figure_interpretation": (
+        "\u56fe\u8868\u89e3\u91ca",
+        "\u7ed3\u679c\u89e3\u91ca",
+        "figure interpretation",
+        "result interpretation",
+    ),
+    "limitations": ("\u5c40\u9650\u6027", "\u9650\u5236", "limitations", "limitation"),
+    "conclusion": ("\u7ed3\u8bba", "conclusion"),
+}
+_LIMITATION_BODY_HINTS = (
+    "\u5c40\u9650",
+    "\u9650\u5236",
+    "sample size",
+    "small sample",
+    "non-causal",
+    "limitation",
+    "limitations",
+)
+_FIGURE_WORD_HINTS = ("\u56fe", "figure", "chart", "plot")
+_FIGURE_INTERPRETATION_HINTS = (
+    "\u663e\u793a",
+    "\u8868\u660e",
+    "\u8bf4\u660e",
+    "\u63d0\u793a",
+    "shows",
+    "indicates",
+    "suggests",
+    "reveals",
+)
+_PAIRED_HINTS = (
+    "\u914d\u5bf9",
+    "\u524d\u540e",
+    "\u540c\u4e00\u5bf9\u8c61",
+    "before-after",
+    "pre-post",
+    "paired",
+    "repeated",
+)
+_MISSING_HINTS = ("\u7f3a\u5931", "missing", "impute", "dropna")
+_OUTLIER_HINTS = ("\u5f02\u5e38\u503c", "\u79bb\u7fa4", "outlier", "extreme value")
+_SMALL_SAMPLE_HINTS = ("\u5c0f\u6837\u672c", "sample size", "small sample", "n=")
+
+
+def _contains_any(text: str, keywords: tuple[str, ...]) -> bool:
+    normalized = str(text or "").lower()
+    return any(keyword.lower() in normalized for keyword in keywords)
+
+
+def _inspect_report_structure(report_markdown: str) -> dict[str, object]:
+    sections = _iter_markdown_sections(report_markdown or "")
+    normalized_sections = [(str(title or "").lower(), str(body or "").lower()) for title, body in sections]
+    normalized_report = str(report_markdown or "").lower()
+    section_presence: dict[str, bool] = {}
+    for key, hints in _REPORT_SECTION_HINTS.items():
+        section_presence[key] = any(any(hint.lower() in title for hint in hints) for title, _ in normalized_sections) or any(
+            re.search(rf"^#+\s+.*{re.escape(hint.lower())}", normalized_report, re.MULTILINE) is not None
+            for hint in hints
+        )
+    if not section_presence["limitations"]:
+        section_presence["limitations"] = any(
+            _contains_any(body, _LIMITATION_BODY_HINTS) for _, body in normalized_sections
+        ) or _contains_any(normalized_report, _LIMITATION_BODY_HINTS)
+
+    figure_reference_count = len(re.findall(r"!\[[^\]]*\]\(([^)]+)\)", report_markdown or ""))
+    figure_interpretation_hit_count = sum(
+        1
+        for line in (report_markdown or "").splitlines()
+        if _contains_any(line, _FIGURE_WORD_HINTS) and _contains_any(line, _FIGURE_INTERPRETATION_HINTS)
+    )
+    return {
+        "section_presence": section_presence,
+        "figure_reference_count": figure_reference_count,
+        "figure_interpretation_hit_count": figure_interpretation_hit_count,
+        "paired_or_prepost_mentioned": _contains_any(normalized_report, _PAIRED_HINTS),
+        "missing_value_handling_mentioned": _contains_any(normalized_report, _MISSING_HINTS),
+        "outlier_handling_mentioned": _contains_any(normalized_report, _OUTLIER_HINTS),
+        "small_sample_limitation_mentioned": _contains_any(normalized_report, _SMALL_SAMPLE_HINTS),
+    }
+
+
+def _format_report_structure_summary(
+    report_markdown: str,
+    *,
+    task_type: str = "",
+    task_expectations: tuple[str, ...] = (),
+) -> str:
+    inspection = _inspect_report_structure(report_markdown)
+    section_presence = inspection["section_presence"]
+    lines = [
+        f"- task_type: {task_type or 'not_provided'}",
+        "- task_expectations:",
+    ]
+    if task_expectations:
+        lines.extend(f"  - {item}" for item in task_expectations)
+    else:
+        lines.append("  - none")
+    lines.extend(
+        [
+            "- report_structure_presence:",
+            f"  - data_overview: {section_presence['data_overview']}",
+            f"  - cleaning_notes: {section_presence['cleaning_notes']}",
+            f"  - methods: {section_presence['methods']}",
+            f"  - core_results: {section_presence['core_results']}",
+            f"  - figure_interpretation: {section_presence['figure_interpretation']}",
+            f"  - limitations: {section_presence['limitations']}",
+            f"  - conclusion: {section_presence['conclusion']}",
+            f"- figure_reference_count: {inspection['figure_reference_count']}",
+            f"- figure_interpretation_hit_count: {inspection['figure_interpretation_hit_count']}",
+            f"- paired_or_prepost_mentioned: {inspection['paired_or_prepost_mentioned']}",
+            f"- missing_value_handling_mentioned: {inspection['missing_value_handling_mentioned']}",
+            f"- outlier_handling_mentioned: {inspection['outlier_handling_mentioned']}",
+            f"- small_sample_limitation_mentioned: {inspection['small_sample_limitation_mentioned']}",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def parse_reviewer_reply(raw_response: str, extract_first_json_object: Any) -> ParsedReviewerReply:
@@ -128,6 +261,8 @@ def build_reviewer_task(
     evidence_coverage: EvidenceCoverage | None = None,
     memory_context: str = "",
     execution_audit: StageExecutionAuditResult | None = None,
+    task_type: str = "",
+    task_expectations: tuple[str, ...] = (),
 ) -> str:
     trace_lines = []
     for trace in step_traces:
@@ -139,11 +274,7 @@ def build_reviewer_task(
     missing = ", ".join(artifact_validation.missing_artifacts) if artifact_validation.missing_artifacts else "none"
     warnings = "; ".join(artifact_validation.warnings) if artifact_validation.warnings else "none"
     round_pattern = re.compile(rf"review_round_{review_round}(?:/|\\)")
-    round_figures = [
-        figure_path
-        for figure_path in telemetry.figures_generated
-        if round_pattern.search(str(figure_path))
-    ]
+    round_figures = [figure_path for figure_path in telemetry.figures_generated if round_pattern.search(str(figure_path))]
     if not round_figures:
         round_figures = list(telemetry.figures_generated)
     figure_evidence_lines = []
@@ -182,12 +313,19 @@ def build_reviewer_task(
         if active_execution_audit.findings
         else "- none"
     )
+    report_structure_summary = _format_report_structure_summary(
+        report_markdown,
+        task_type=task_type,
+        task_expectations=task_expectations,
+    )
 
     return (
         f"Review round: {review_round}\n"
         f"Candidate report path: {report_path.as_posix()}\n\n"
         "Dataset metadata summary:\n"
         f"{data_context.context_text}\n"
+        "Task alignment summary:\n"
+        f"{report_structure_summary}\n\n"
         "Execution trace summary:\n"
         f"{trace_summary}\n\n"
         "Generated artifacts evidence:\n"
@@ -245,12 +383,14 @@ def build_reviewer_task(
 def build_stage_audit_rejection(audit_result: StageExecutionAuditResult) -> ParsedReviewerReply:
     findings = [finding.message for finding in audit_result.findings]
     critique = (
-        "阶段执行审计未通过："
-        f"status={audit_result.status}；"
-        "系统未能证明该轮分析遵守“先保存 cleaned_data.csv，再在后续 Python 步骤中重读并分析”的两阶段契约。"
+        "\u9636\u6bb5\u6267\u884c\u5ba1\u8ba1\u672a\u901a\u8fc7\uff1a"
+        f"status={audit_result.status}\uff0c"
+        "\u7cfb\u7edf\u672a\u80fd\u8bc1\u660e\u8be5\u8f6e\u5206\u6790\u9075\u5b88"
+        "\u201c\u5148\u4fdd\u5b58 cleaned_data.csv\uff0c\u518d\u5728\u540e\u7eed Python \u6b65\u9aa4\u4e2d\u663e\u5f0f\u91cd\u8bfb\u5e76\u5206\u6790\u201d"
+        "\u7684\u4e24\u9636\u6bb5\u5951\u7ea6\u3002"
     )
     if findings:
-        critique = critique + " 具体问题：" + " | ".join(findings)
+        critique = critique + " \u5177\u4f53\u95ee\u9898\uff1a" + " | ".join(findings)
     payload = {
         "decision": "Reject",
         "critique": critique,

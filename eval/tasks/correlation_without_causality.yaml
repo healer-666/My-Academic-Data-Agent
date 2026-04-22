@@ -1,0 +1,27 @@
+{
+  "task_id": "correlation_without_causality",
+  "title": "相关不等于因果",
+  "data_path": "data/eval/correlation_without_causality.csv",
+  "question": "分析 marker_a 和 marker_b 的关系，并解释不同 cohort 中的整体模式，但不要夸大为因果结论。",
+  "task_type": "correlation_without_causality",
+  "quality_mode": "standard",
+  "latency_mode": "auto",
+  "use_rag": false,
+  "use_memory": false,
+  "memory_scope_key": "eval-default",
+  "expected_methods": ["correlation_analysis", "scatter_plot"],
+  "key_checks": [
+    "must_workflow_complete",
+    "must_create_cleaned_data",
+    "must_pass_execution_audit",
+    "must_generate_report",
+    "must_generate_trace",
+    "must_generate_at_least_one_chart"
+  ],
+  "manual_expectations": [
+    "必须明确相关性不等于因果",
+    "图表解释不能把相关关系写成机制已经证明"
+  ],
+  "common_failures": ["review_rejection"],
+  "notes": "用于测相关分析和审稿层面的过度结论压力。"
+}
