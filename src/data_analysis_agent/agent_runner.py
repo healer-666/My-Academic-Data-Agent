@@ -764,6 +764,26 @@ def _build_stage_audit_rejection(audit_result: StageExecutionAuditResult) -> Par
     return _build_stage_audit_rejection_service(audit_result)
 
 
+def _can_reuse_prior_passed_execution_audit(audit_result: StageExecutionAuditResult) -> bool:
+    if audit_result.passed:
+        return False
+    return audit_result.status == "skipped" and any(
+        "No successful Python analysis steps were available" in finding.message for finding in audit_result.findings
+    )
+
+
+def _select_effective_execution_audit(
+    audit_result: StageExecutionAuditResult,
+    prior_rounds: tuple[AnalystRoundRecord, ...],
+) -> StageExecutionAuditResult:
+    if not _can_reuse_prior_passed_execution_audit(audit_result):
+        return audit_result
+    for prior_round in reversed(prior_rounds):
+        if prior_round.execution_audit.passed:
+            return prior_round.execution_audit
+    return audit_result
+
+
 def _extract_blocking_issues_from_critique(critique: str) -> tuple[str, ...]:
     text = str(critique or "").strip()
     if not text:
@@ -1835,10 +1855,14 @@ def run_analysis(
             )
         )
 
-        current_execution_audit = audit_stage_execution(
+        round_execution_audit = audit_stage_execution(
             step_traces=reindexed_traces,
             source_data_path=data_context.absolute_path,
             cleaned_data_path=cleaned_data_path,
+        )
+        current_execution_audit = _select_effective_execution_audit(
+            round_execution_audit,
+            tuple(analysis_rounds[:-1]),
         )
         current_report_contract = check_report_contract(
             report_markdown,

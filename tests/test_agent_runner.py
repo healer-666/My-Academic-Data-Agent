@@ -15,9 +15,11 @@ if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
 from data_analysis_agent.agent_runner import (
+    AnalystRoundRecord,
     ArtifactValidationResult,
     ScientificReActRunner,
     _build_reviewer_task,
+    _select_effective_execution_audit,
     build_plaintext_event_handler,
     run_analysis,
 )
@@ -36,6 +38,7 @@ from data_analysis_agent.review_service import _inspect_report_structure
 from data_analysis_agent.rag.models import RagIndexResult, RagRetrievalResult, RetrievedChunk
 from data_analysis_agent.rag.query_builder import RetrievalQueryBundle
 from data_analysis_agent.reporting import EvidenceCoverage, ReportTelemetry
+from data_analysis_agent.runtime_models import StageExecutionAuditResult, StageExecutionFinding
 
 
 def _finish_report(
@@ -415,6 +418,44 @@ class AgentRunnerTests(unittest.TestCase):
 
         self.assertIn(figure_path.as_posix(), reviewer_task)
         self.assertIn("exists=True", reviewer_task)
+
+    def test_effective_execution_audit_reuses_prior_passed_audit_for_report_only_revision(self):
+        prior_audit = StageExecutionAuditResult(
+            status="passed",
+            stage1_save_detected=True,
+            stage2_cleaned_reload_detected=True,
+            findings=(
+                StageExecutionFinding(
+                    finding_type="info",
+                    message="Detected canonical cleaned_data.csv save in Stage 1 and explicit reload in a later Python step.",
+                ),
+            ),
+            evidence_step_indices=(1, 2),
+        )
+        empty_revision_audit = StageExecutionAuditResult(
+            status="skipped",
+            findings=(
+                StageExecutionFinding(
+                    finding_type="warning",
+                    message="No successful Python analysis steps were available for stage-contract audit.",
+                ),
+            ),
+        )
+
+        effective = _select_effective_execution_audit(
+            empty_revision_audit,
+            (
+                AnalystRoundRecord(
+                    round_index=1,
+                    report_path=Path("outputs/run/review_round_1_report.md"),
+                    step_traces=(),
+                    execution_audit=prior_audit,
+                ),
+            ),
+        )
+
+        self.assertIs(effective, prior_audit)
+        self.assertTrue(effective.passed)
 
     def test_report_structure_inspection_flags_missing_figure_explanation_and_limitations(self):
         report_markdown = (

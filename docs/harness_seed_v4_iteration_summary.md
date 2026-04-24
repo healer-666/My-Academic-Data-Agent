@@ -245,3 +245,33 @@ console log：
 一句话总结：
 
 > 本轮修复已经从单点 hotfix 进入跨任务有效阶段；当前 harness 的主要瓶颈从 analyst/reviewer 不对齐，收敛为三个任务的执行/cleaning contract 稳定性问题。
+
+## 2026-04-24 cleaning contract follow-up
+
+在不继续扩大 prompt 面积的前提下，逐个检查了 `seed_v4` 中三个失败 run：
+
+| Task | seed_v4 failed run | 失败形态 | 后续处理 |
+|---|---|---|---|
+| `missing_values_by_group` | `run_20260424_112705` | round 1 audit 已通过，但 report contract 未过；round 2 只修报告并直接 finish，导致最终 audit 被空轮次覆盖成 skipped | runner 层允许报告返修轮复用同一 run 内之前已通过的 execution audit |
+| `outlier_sensitive_measurement` | `run_20260424_113124` | 同上：第一轮分析产物已可审计，第二轮报告返修覆盖了 audit 状态 | 同一 runner 修复覆盖 |
+| `multi_group_with_variance_shift` | `run_20260424_113357` | 旧 run 中 Python TypeError 连续出现，且未形成成功 Stage 2 reload；新 run 中第一轮 audit 通过、contract 未过，第二轮报告返修后通过 | 同一 runner 修复使报告返修不再破坏已通过 audit |
+
+本次修复点：
+
+- 新增 `_select_effective_execution_audit(...)`
+- 当当前返修轮没有成功 Python 分析步骤、audit 为 skipped，且同一 run 的前序轮次已有 passed audit 时，复用前序 passed audit
+- 这把“分析产物审计”和“报告文字返修”解耦，避免报告-only 返修轮把已经通过的 Stage 1 / Stage 2 证据抹掉
+
+验证结果：
+
+| Task | New run | Result |
+|---|---|---|
+| `missing_values_by_group` | `run_20260424_155917` | accepted=true, review=accepted, audit=passed |
+| `outlier_sensitive_measurement` | `run_20260424_160105` | accepted=true, review=accepted, audit=passed |
+| `multi_group_with_variance_shift` | `run_20260424_160224` | accepted=true, review=accepted, audit=passed |
+
+阶段判断：
+
+- 三个 `cleaning_contract_failure` 已被逐个验证压下去。
+- 本轮没有新增大面积 prompt，而是修正了 runner 对返修轮 audit 状态的选择。
+- 下一次完整 10 任务 eval 可以作为新的 `seed_v5` 候选，但不需要在没有用户确认前立即启动。
