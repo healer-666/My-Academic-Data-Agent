@@ -46,6 +46,7 @@ from .prompts import (
     build_response_format_feedback,
     build_system_prompt,
 )
+from .report_contract import build_revision_brief, check_report_contract
 from .rag import RagService
 from .rag.models import RetrievedChunk
 from .reporting import (
@@ -72,8 +73,10 @@ from .runtime_models import (
     ArtifactValidationResult,
     ParsedAgentReply,
     ParsedReviewerReply,
+    ReportContractCheckResult,
     ReviewRecord,
     ReviewerEvidenceFinding,
+    RevisionBrief,
     RunContext,
     StageExecutionAuditResult,
     VisualReviewRecord,
@@ -761,6 +764,24 @@ def _build_stage_audit_rejection(audit_result: StageExecutionAuditResult) -> Par
     return _build_stage_audit_rejection_service(audit_result)
 
 
+def _extract_blocking_issues_from_critique(critique: str) -> tuple[str, ...]:
+    text = str(critique or "").strip()
+    if not text:
+        return ()
+    issues: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        stripped = re.sub(r"^\d+[\.\)]\s*", "", stripped)
+        stripped = re.sub(r"^[-*]\s*", "", stripped)
+        if stripped:
+            issues.append(stripped)
+    if not issues:
+        issues.append(text)
+    return tuple(dict.fromkeys(issues))
+
+
 def _build_reviewer_task(
     *,
     data_context: DataContextSummary,
@@ -775,6 +796,7 @@ def _build_reviewer_task(
     evidence_coverage=None,
     memory_context: str = "",
     execution_audit: StageExecutionAuditResult | None = None,
+    report_contract_check: ReportContractCheckResult | None = None,
     task_type: str = "",
     task_expectations: tuple[str, ...] = (),
 ) -> str:
@@ -791,6 +813,7 @@ def _build_reviewer_task(
         evidence_coverage=evidence_coverage,
         memory_context=memory_context,
         execution_audit=execution_audit,
+        report_contract_check=report_contract_check,
         task_type=task_type,
         task_expectations=task_expectations,
     )
@@ -859,6 +882,7 @@ def _save_agent_trace(
     memory_payload: dict[str, Any] | None = None,
     failure_memory_payload: dict[str, Any] | None = None,
     execution_audit: StageExecutionAuditResult | None = None,
+    report_contract_check: ReportContractCheckResult | None = None,
 ) -> Path:
     active_run_context = run_context or RunContext(
         run_id=run_dir.name,
@@ -907,6 +931,7 @@ def _save_agent_trace(
         memory_payload=memory_payload,
         failure_memory_payload=failure_memory_payload,
         execution_audit=execution_audit,
+        report_contract_check=report_contract_check,
     )
 
 
@@ -1484,7 +1509,7 @@ def run_analysis(
             status=rag_status,
             reason="RAG is disabled for this run.",
         )
-    elif not runtime_config.embedding_configured:
+    elif not runtime_config.embedding_configured and not normalized_knowledge_paths:
         warning_text = "Embedding configuration is incomplete; skipping local RAG retrieval."
         rag_payload["status"] = "skipped"
         rag_status = "skipped"
@@ -1497,6 +1522,10 @@ def run_analysis(
         )
     else:
         try:
+            if not runtime_config.embedding_configured:
+                rag_payload["warnings"].append(
+                    "Embedding configuration is incomplete; using keyword-only local RAG retrieval."
+                )
             rag_service = RagService(
                 runtime_config=runtime_config,
                 knowledge_base_dir=active_knowledge_base_dir,
@@ -1713,6 +1742,7 @@ def run_analysis(
     analyst_messages: list[dict[str, str]] | None = None
     current_runner: Optional[ScientificReActRunner] = None
     current_execution_audit = StageExecutionAuditResult(status="not_checked")
+    current_report_contract = ReportContractCheckResult()
 
     total_rounds = 1 if not review_enabled else 1 + effective_max_reviews
 
@@ -1810,11 +1840,19 @@ def run_analysis(
             source_data_path=data_context.absolute_path,
             cleaned_data_path=cleaned_data_path,
         )
+        current_report_contract = check_report_contract(
+            report_markdown,
+            task_type=resolved_task_type,
+            task_expectations=resolved_task_expectations,
+            telemetry=telemetry,
+            evidence_coverage=evidence_coverage,
+        )
         analysis_rounds[-1] = AnalystRoundRecord(
             round_index=review_round,
             report_path=round_report_path,
             step_traces=reindexed_traces,
             execution_audit=current_execution_audit,
+            report_contract_check=current_report_contract,
         )
 
         _emit_event(
@@ -1880,6 +1918,7 @@ def run_analysis(
             memory_payload=memory_payload,
             failure_memory_payload=failure_memory_payload,
             execution_audit=current_execution_audit,
+            report_contract_check=current_report_contract,
         )
         _accumulate_duration(timing_breakdown, "trace_persist_duration_ms", _elapsed_ms(trace_persist_started_at))
 
@@ -1896,8 +1935,12 @@ def run_analysis(
             review_rounds_used = 0
             review_critique = (
                 "Review skipped in draft mode."
-                if current_execution_audit.passed
-                else "Draft mode skipped reviewer, but stage execution audit did not pass."
+                if current_execution_audit.passed and current_report_contract.passed
+                else (
+                    "Draft mode skipped reviewer, but stage execution audit did not pass."
+                    if not current_execution_audit.passed
+                    else "Draft mode skipped reviewer, but the report contract did not pass."
+                )
             )
             break
 
@@ -1943,12 +1986,89 @@ def run_analysis(
             analyst_messages.append(
                 {
                     "role": "user",
+                    "content": build_revision_brief(
+                        source="stage_execution_audit",
+                        blocking_issues=tuple(finding.message for finding in current_execution_audit.findings)
+                        or ("Stage execution audit did not pass.",),
+                        next_round_figures_dir=(figures_dir / f"review_round_{review_round + 1}").as_posix(),
+                    ).to_user_message(),
+                }
+            )
+            continue
+
+            analyst_messages.append(
+                {
+                    "role": "user",
                     "content": (
                         f"[阶段执行审计未通过]：{reviewer_reply.critique}\n"
                         "你必须先修复执行流程本身：先把原始数据清洗并保存到规范 cleaned_data.csv，"
                         "再在后续新的 Python 步骤中明确重读该文件完成正式分析。"
                         f"下一轮所有新图表必须保存到：{(figures_dir / f'review_round_{review_round + 1}').as_posix()}。"
                     ),
+                }
+            )
+            continue
+
+        if not current_report_contract.passed:
+            contract_reply = ParsedReviewerReply(
+                decision="Reject",
+                critique="Pre-review report contract check failed: " + " | ".join(current_report_contract.blocking_issues),
+                raw_response=json.dumps(
+                    {
+                        "decision": "Reject",
+                        "critique": "Pre-review report contract check failed: "
+                        + " | ".join(current_report_contract.blocking_issues),
+                        "source": "pre_review_contract",
+                        "report_contract_check": current_report_contract.to_trace_dict(),
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+            review_log_path = logs_dir / f"review_round_{review_round}_review.json"
+            saved_review_log_path = _save_review_log(
+                review_log_path=review_log_path,
+                review_round=review_round,
+                reviewer_reply=contract_reply,
+                candidate_report_path=saved_report_path,
+            )
+            review_history.append(
+                ReviewRecord(
+                    round_index=review_round,
+                    decision=contract_reply.decision,
+                    critique=contract_reply.critique,
+                    raw_response=contract_reply.raw_response,
+                    review_log_path=saved_review_log_path,
+                    candidate_report_path=saved_report_path,
+                    evidence_findings=contract_reply.evidence_findings,
+                )
+            )
+            review_rounds_used = review_round
+            review_critique = contract_reply.critique
+            _emit_event(
+                event_recorder.emit,
+                "review_rejected",
+                review_round=review_round,
+                critique=contract_reply.critique,
+            )
+            review_status = "rejected"
+            if review_round >= total_rounds:
+                review_status = "max_reviews_reached"
+                _emit_event(
+                    event_recorder.emit,
+                    "review_max_reached",
+                    review_round=review_round,
+                    critique=contract_reply.critique,
+                )
+                break
+
+            analyst_messages.append(
+                {
+                    "role": "user",
+                    "content": build_revision_brief(
+                        source="pre_review_contract",
+                        blocking_issues=current_report_contract.blocking_issues,
+                        next_round_figures_dir=(figures_dir / f"review_round_{review_round + 1}").as_posix(),
+                    ).to_user_message(),
                 }
             )
             continue
@@ -2052,6 +2172,7 @@ def run_analysis(
                     evidence_coverage=evidence_coverage,
                     memory_context=combined_memory_context_text,
                     execution_audit=current_execution_audit,
+                    report_contract_check=current_report_contract,
                     task_type=resolved_task_type,
                     task_expectations=resolved_task_expectations,
                 ),
@@ -2117,6 +2238,18 @@ def run_analysis(
                 critique=reviewer_reply.critique,
             )
             break
+
+        analyst_messages.append(
+            {
+                "role": "user",
+                "content": build_revision_brief(
+                    source="reviewer",
+                    blocking_issues=_extract_blocking_issues_from_critique(reviewer_reply.critique),
+                    next_round_figures_dir=(figures_dir / f"review_round_{review_round + 1}").as_posix(),
+                ).to_user_message(),
+            }
+        )
+        continue
 
         analyst_messages.append(
             {
@@ -2234,6 +2367,9 @@ def run_analysis(
                 execution_audit_status=current_execution_audit.status,
                 execution_audit_passed=current_execution_audit.passed,
                 execution_audit_findings=tuple(finding.message for finding in current_execution_audit.findings),
+                report_contract_passed=current_report_contract.passed,
+                report_contract_blocking_issues=current_report_contract.blocking_issues,
+                report_contract_issue_types=current_report_contract.issue_types,
             )
             extraction_result = extract_memory_records(
                 result=provisional_result,
@@ -2380,6 +2516,9 @@ def run_analysis(
                 execution_audit_status=current_execution_audit.status,
                 execution_audit_passed=current_execution_audit.passed,
                 execution_audit_findings=tuple(finding.message for finding in current_execution_audit.findings),
+                report_contract_passed=current_report_contract.passed,
+                report_contract_blocking_issues=current_report_contract.blocking_issues,
+                report_contract_issue_types=current_report_contract.issue_types,
             )
             failure_extraction_result = extract_failure_memory_records(
                 result=provisional_failure_result,
@@ -2477,6 +2616,7 @@ def run_analysis(
         memory_payload=memory_payload,
         failure_memory_payload=failure_memory_payload,
         execution_audit=current_execution_audit,
+        report_contract_check=current_report_contract,
     )
     _accumulate_duration(
         timing_breakdown,
@@ -2580,6 +2720,9 @@ def run_analysis(
         execution_audit_status=current_execution_audit.status,
         execution_audit_passed=current_execution_audit.passed,
         execution_audit_findings=tuple(finding.message for finding in current_execution_audit.findings),
+        report_contract_passed=current_report_contract.passed,
+        report_contract_blocking_issues=current_report_contract.blocking_issues,
+        report_contract_issue_types=current_report_contract.issue_types,
     )
     _save_run_summary_service(
         summary_path=run_dir / "run_summary.json",

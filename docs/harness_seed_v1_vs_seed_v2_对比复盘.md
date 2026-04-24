@@ -1,5 +1,17 @@
 # Harness `seed_v1` vs `seed_v2` 对比复盘
 
+## 2026-04-24 后续状态
+
+后续 `seed_v4` 迭代已经把 harness 从 `seed_v2` 的 `0/10 accepted` 推进到阶段性 `7/10 accepted`。
+
+当前主矛盾已经不再是大面积 analyst / reviewer 不对齐，而是集中到三个仍触发 `cleaning_contract_failure` 的任务：
+
+- `missing_values_by_group`
+- `outlier_sensitive_measurement`
+- `multi_group_with_variance_shift`
+
+详细记录见 `docs/harness_seed_v4_iteration_summary.md`。下一轮建议逐个检查这三个失败 run 的真实执行轨迹，而不是继续扩大 prompt 面积。
+
 ## 1. 复盘范围
 
 本次对比使用的不是两个已经合并好的 baseline 文件，而是两轮评测中每个任务**最新可用的 summary**。

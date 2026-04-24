@@ -10,6 +10,7 @@ tool-output/tmp*/
 tool-output/debug-temp/
 outputs/
 eval/reports/
+memory/knowledge_base/
 tool-output/
 logs/
 Co-creation-projects/

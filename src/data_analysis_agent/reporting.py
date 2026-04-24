@@ -82,6 +82,20 @@ def _normalize_string_list(value: Any) -> tuple[str, ...]:
     return tuple(normalized)
 
 
+def _normalize_telemetry_path(value: Any) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    return raw.replace("\\", "/")
+
+
+def _normalize_telemetry_path_list(value: Any) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    normalized = [_normalize_telemetry_path(item) for item in value]
+    return tuple(item for item in normalized if item)
+
+
 def extract_report_and_telemetry(result_text: str) -> ReportExtractionResult:
     """Extract the report body and structured telemetry from the model output."""
 
@@ -110,8 +124,8 @@ def extract_report_and_telemetry(result_text: str) -> ReportExtractionResult:
                 search_used=bool(payload.get("search_used", False)),
                 search_notes=str(payload.get("search_notes", "unknown")).strip() or "unknown",
                 cleaned_data_saved=bool(payload.get("cleaned_data_saved", False)),
-                cleaned_data_path=str(payload.get("cleaned_data_path", "")).strip(),
-                figures_generated=_normalize_string_list(payload.get("figures_generated")),
+                cleaned_data_path=_normalize_telemetry_path(payload.get("cleaned_data_path", "")),
+                figures_generated=_normalize_telemetry_path_list(payload.get("figures_generated")),
                 valid=True,
                 warning=None,
                 raw_payload=payload,

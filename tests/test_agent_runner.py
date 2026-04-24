@@ -363,6 +363,59 @@ class AgentRunnerTests(unittest.TestCase):
         self.assertIn("task_type: paired_measure", reviewer_task)
         self.assertIn("必须说明配对结构", reviewer_task)
 
+    def test_build_reviewer_task_resolves_basename_figure_paths_to_review_round_dir(self):
+        data_context = DataContextSummary(
+            data_path=Path("data/sample.csv"),
+            absolute_path=PROJECT_ROOT / "data" / "sample.csv",
+            columns=["marker_a", "marker_b"],
+            dtypes="marker_a float64\nmarker_b float64",
+            shape=(4, 2),
+            head_markdown="| marker_a | marker_b |",
+            sample_size_warning="",
+            small_sample_warning=False,
+            context_text="demo context",
+        )
+        artifact_validation = ArtifactValidationResult(True, (), (), True, True, True)
+        report_path = PROJECT_ROOT / "outputs" / "run_20260423_demo" / "final_report.md"
+        figures_dir = report_path.parent / "figures" / "review_round_2"
+        figures_dir.mkdir(parents=True, exist_ok=True)
+        figure_path = figures_dir / "scatter.png"
+        figure_path.write_text("fake", encoding="utf-8")
+        telemetry = ReportTelemetry(
+            methods=("Spearman correlation",),
+            domain="science",
+            tools_used=("PythonInterpreterTool",),
+            search_used=False,
+            search_notes="",
+            cleaned_data_saved=True,
+            cleaned_data_path="outputs/run/data/cleaned_data.csv",
+            figures_generated=("scatter.png",),
+            valid=True,
+            raw_payload={},
+        )
+
+        reviewer_task = _build_reviewer_task(
+            data_context=data_context,
+            report_markdown=(
+                "# Figure Interpretation\n"
+                "![scatter](C:/abs/path/scatter.png)\n"
+                "The scatter plot shows a strong positive correlation.\n"
+            ),
+            report_path=report_path,
+            step_traces=(),
+            artifact_validation=artifact_validation,
+            telemetry=telemetry,
+            review_round=2,
+            visual_review_summary="No major chart issues.",
+            evidence_register=(),
+            evidence_coverage=EvidenceCoverage(),
+            task_type="correlation_without_causality",
+            task_expectations=(),
+        )
+
+        self.assertIn(figure_path.as_posix(), reviewer_task)
+        self.assertIn("exists=True", reviewer_task)
+
     def test_report_structure_inspection_flags_missing_figure_explanation_and_limitations(self):
         report_markdown = (
             "# Data Overview\n"
@@ -436,7 +489,13 @@ class AgentRunnerTests(unittest.TestCase):
                         "tool_name": "",
                         "tool_input": "",
                         "final_answer": _finish_report(
-                            "Memory mode.",
+                            "# Data Overview\nIndependent two-group demo dataset.\n\n"
+                            "# Data Cleaning Notes\nSaved cleaned data and reloaded the canonical cleaned_data.csv path.\n\n"
+                            "# Methods\nDescriptive statistics only.\n\n"
+                            "# Core Statistical Results\nNo formal hypothesis test was run in this smoke case.\n\n"
+                            "# Figure Interpretation\nNo figures were generated.\n\n"
+                            "# Limitations\nSmall synthetic smoke-test dataset.\n\n"
+                            "# Conclusion\nConservative summary only.\n",
                             domain="biomedicine",
                             cleaned=True,
                             cleaned_data_path=fixed_cleaned_path.as_posix(),
@@ -529,6 +588,80 @@ class AgentRunnerTests(unittest.TestCase):
         self.assertEqual(result.review_status, "max_reviews_reached")
         self.assertIn("阶段执行审计未通过", result.review_critique)
         self.assertEqual(result.failure_memory_writeback_status, "written")
+
+    def test_run_analysis_hard_rejects_report_contract_failure_before_reviewer(self):
+        tmp_path = self._workspace_case_dir()
+        data_path = tmp_path / "sample.csv"
+        data_path.write_text("group,score,timepoint\ncontrol,1,day7\nintervention,2,day7\n", encoding="utf-8")
+        fixed_run_dir = tmp_path / "outputs" / "run_contract_failure"
+        (fixed_run_dir / "data").mkdir(parents=True, exist_ok=True)
+        (fixed_run_dir / "figures").mkdir(parents=True, exist_ok=True)
+        (fixed_run_dir / "logs").mkdir(parents=True, exist_ok=True)
+        fixed_cleaned_path = fixed_run_dir / "data" / "cleaned_data.csv"
+        llm = StubLLM(
+            [
+                json.dumps(
+                    {
+                        "decision": "Stage 1 save cleaned data",
+                        "action": "call_tool",
+                        "tool_name": "PythonInterpreterTool",
+                        "tool_input": f'import pandas as pd\ndf = pd.read_csv(r"{data_path.as_posix()}")\ndf.to_csv(r"{fixed_cleaned_path.as_posix()}", index=False)\nprint("saved")',
+                        "final_answer": "",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "decision": "Stage 2 reload cleaned data",
+                        "action": "call_tool",
+                        "tool_name": "PythonInterpreterTool",
+                        "tool_input": f'import pandas as pd\ndf = pd.read_csv(r"{fixed_cleaned_path.as_posix()}")\nprint(df.shape)',
+                        "final_answer": "",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "decision": "Done",
+                        "action": "finish",
+                        "tool_name": "",
+                        "tool_input": "",
+                        "final_answer": _finish_report(
+                            "# Data Overview\nBrief.\n\n# Data Cleaning Notes\nSaved cleaned data.\n\n# Methods\nIndependent two-group comparison, not paired.\n\n# Core Statistical Results\nMann-Whitney U = 0.0, p = 0.01.\n\n# Conclusion\nDone.",
+                            domain="biomedicine",
+                            cleaned=True,
+                            cleaned_data_path=fixed_cleaned_path.as_posix(),
+                        ),
+                    }
+                ),
+            ]
+        )
+
+        with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=self._runtime_config(embedding=True)), patch(
+            "data_analysis_agent.agent_runner.build_llm", return_value=llm
+        ), patch(
+            "data_analysis_agent.agent_runner.build_tool_registry", return_value=StubRegistry(cleaned_data_path=fixed_cleaned_path)
+        ), patch(
+            "data_analysis_agent.agent_runner._create_run_directory",
+            return_value=(
+                fixed_run_dir,
+                fixed_run_dir / "data",
+                fixed_run_dir / "figures",
+                fixed_run_dir / "logs",
+            ),
+        ):
+            result = run_analysis(
+                data_path,
+                output_dir=tmp_path / "outputs",
+                quality_mode="standard",
+                max_reviews=0,
+                task_type="two_group_small_sample",
+            )
+
+        self.assertEqual(len(llm.calls), 3)
+        self.assertEqual(result.execution_audit_status, "passed")
+        self.assertTrue(result.execution_audit_passed)
+        self.assertFalse(result.report_contract_passed)
+        self.assertEqual(result.review_status, "max_reviews_reached")
+        self.assertIn("Pre-review report contract check failed", result.review_critique)
 
 
 if __name__ == "__main__":

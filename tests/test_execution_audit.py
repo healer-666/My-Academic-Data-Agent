@@ -87,6 +87,54 @@ class ExecutionAuditTests(unittest.TestCase):
         self.assertEqual(result.status, "failed")
         self.assertTrue(any("reloaded" in finding.message for finding in result.findings))
 
+    def test_audit_accepts_cleaned_path_built_with_os_path_join(self):
+        case_dir = self._workspace_case_dir()
+        raw_path = case_dir / "sample.csv"
+        raw_path.write_text("a,b\n1,2\n", encoding="utf-8")
+        cleaned_path = case_dir / "outputs" / "run_demo" / "data" / "cleaned_data.csv"
+        cleaned_path.parent.mkdir(parents=True, exist_ok=True)
+        cleaned_path.write_text("a,b\n1,2\n", encoding="utf-8")
+        traces = (
+            AgentStepTrace(
+                step_index=1,
+                raw_response="{}",
+                action="call_tool",
+                tool_name="PythonInterpreterTool",
+                tool_input=(
+                    "import os, pandas as pd\n"
+                    f'out_dir = r"{cleaned_path.parent.as_posix()}"\n'
+                    "cleaned_path = os.path.join(out_dir, 'cleaned_data.csv')\n"
+                    f'df = pd.read_csv(r"{raw_path.as_posix()}")\n'
+                    "df.to_csv(cleaned_path, index=False)"
+                ),
+                tool_status="success",
+            ),
+            AgentStepTrace(
+                step_index=2,
+                raw_response="{}",
+                action="call_tool",
+                tool_name="PythonInterpreterTool",
+                tool_input=(
+                    "import os, pandas as pd\n"
+                    f'out_dir = r"{cleaned_path.parent.as_posix()}"\n'
+                    "cleaned_path = os.path.join(out_dir, 'cleaned_data.csv')\n"
+                    "df = pd.read_csv(cleaned_path)\n"
+                    "print(df.shape)"
+                ),
+                tool_status="success",
+            ),
+        )
+
+        result = audit_stage_execution(
+            step_traces=traces,
+            source_data_path=raw_path,
+            cleaned_data_path=cleaned_path,
+        )
+
+        self.assertEqual(result.status, "passed")
+        self.assertTrue(result.stage1_save_detected)
+        self.assertTrue(result.stage2_cleaned_reload_detected)
+
     def test_audit_fails_when_raw_data_is_reused_after_stage1(self):
         case_dir = self._workspace_case_dir()
         raw_path = case_dir / "sample.csv"

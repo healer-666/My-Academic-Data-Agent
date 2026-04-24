@@ -268,21 +268,29 @@ class _PathAuditVisitor(ast.NodeVisitor):
         self.source_candidates = source_candidates
         self.cleaned_candidates = cleaned_candidates
         self.variable_kinds: dict[str, str] = {}
+        self.variable_literals: dict[str, str] = {}
         self.operations: list[dict[str, str]] = []
         self.findings: list[StageExecutionFinding] = []
 
     def visit_Assign(self, node: ast.Assign) -> None:  # noqa: N802
+        literal = self._resolve_path_text(node.value)
         kind = self._resolve_path_kind(node.value)
-        if kind in {"raw", "cleaned"}:
-            for target in node.targets:
-                if isinstance(target, ast.Name):
+        for target in node.targets:
+            if isinstance(target, ast.Name):
+                if literal:
+                    self.variable_literals[target.id] = literal
+                if kind in {"raw", "cleaned"}:
                     self.variable_kinds[target.id] = kind
         self.generic_visit(node)
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> None:  # noqa: N802
+        literal = self._resolve_path_text(node.value)
         kind = self._resolve_path_kind(node.value)
-        if kind in {"raw", "cleaned"} and isinstance(node.target, ast.Name):
-            self.variable_kinds[node.target.id] = kind
+        if isinstance(node.target, ast.Name):
+            if literal:
+                self.variable_literals[node.target.id] = literal
+            if kind in {"raw", "cleaned"}:
+                self.variable_kinds[node.target.id] = kind
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
@@ -325,11 +333,40 @@ class _PathAuditVisitor(ast.NodeVisitor):
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
             return self._match_literal(node.value)
         if isinstance(node, ast.Name):
-            return self.variable_kinds.get(node.id)
+            return self.variable_kinds.get(node.id) or self._match_literal(self.variable_literals.get(node.id, ""))
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.args:
             if node.func.id in {"Path", "str"}:
                 return self._resolve_path_kind(node.args[0])
+        literal = self._resolve_path_text(node)
+        if literal:
+            return self._match_literal(literal)
         return None
+
+    def _resolve_path_text(self, node: ast.AST | None) -> str:
+        if node is None:
+            return ""
+        if isinstance(node, ast.Str):
+            return _normalize_path_text(node.s)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return _normalize_path_text(node.value)
+        if isinstance(node, ast.Name):
+            return self.variable_literals.get(node.id, "")
+        if isinstance(node, ast.Call):
+            func = node.func
+            func_name = ""
+            if isinstance(func, ast.Attribute):
+                func_name = func.attr
+            elif isinstance(func, ast.Name):
+                func_name = func.id
+            if func_name in {"Path", "str"} and node.args:
+                return self._resolve_path_text(node.args[0])
+            if func_name == "join" and node.args:
+                parts = [self._resolve_path_text(arg).strip("/") for arg in node.args]
+                if all(parts):
+                    first = parts[0]
+                    rest = [part for part in parts[1:] if part]
+                    return _normalize_path_text("/".join([first, *rest]))
+        return ""
 
     def _match_literal(self, value: str) -> str | None:
         normalized = _normalize_path_text(value)

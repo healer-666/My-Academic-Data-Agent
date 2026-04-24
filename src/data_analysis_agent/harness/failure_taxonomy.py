@@ -48,20 +48,20 @@ _CITATION_HINTS = (
 def classify_failure_types(result: AnalysisRunResult) -> tuple[str, ...]:
     failure_types: list[str] = []
     review_failed = result.review_status in {"rejected", "max_reviews_reached"}
-    critique = str(result.review_critique or "")
 
     if result.execution_audit_status != "passed":
         failure_types.append("cleaning_contract_failure")
     if (not result.workflow_complete) and result.missing_artifacts:
         failure_types.append("artifact_contract_failure")
-    if result.rag_uncited_sections_detected or result.rag_evidence_coverage_status in {"missing_citations", "invalid"}:
+    if result.rag_uncited_sections_detected or result.rag_evidence_coverage_status in {"missing_citations", "invalid", "invalid_citations", "invalid_and_missing"}:
         failure_types.append("citation_evidence_failure")
 
-    if review_failed and _contains_any(critique, _STRUCTURE_HINTS):
+    contract_issue_types = set(result.report_contract_issue_types)
+    if review_failed and "report_structure_failure" in contract_issue_types:
         failure_types.append("report_structure_failure")
-    if review_failed and _contains_any(critique, _FIGURE_INTERPRETATION_HINTS):
+    if review_failed and "figure_interpretation_failure" in contract_issue_types:
         failure_types.append("figure_interpretation_failure")
-    if review_failed and _contains_any(critique, _CITATION_HINTS):
+    if review_failed and "citation_evidence_failure" in contract_issue_types:
         failure_types.append("citation_evidence_failure")
     if review_failed:
         failure_types.append("review_rejection")

@@ -94,22 +94,48 @@ Academic Guardrails / 统计学汇报规范:
 - In Result Interpretation, Discussion, and Conclusion sections, strictly separate correlation from causation.
 - Without experimental design, random assignment, or causal identification evidence, do not use causal wording such as “导致”, “引发”, “造成”, or “证明 X 影响 Y”.
 - Use non-causal wording such as “相关”, “关联”, “差异”, “提示”, or “可能有关”.
+- If the domain cannot be confirmed from dataset metadata or retrieved evidence, keep the interpretation generic and do not introduce unsupported domain-specific mechanisms, subtypes, diagnoses, interventions, or biological/clinical labels.
 - If your observations do not contain effect sizes, confidence intervals, or the required multiple-comparison correction details, the analysis is not ready to finish.
 - If you generate a figure, the final report must explain what that figure shows and why it matters. Do not finish with bare image references and no textual interpretation.
 - Use a stable report structure that the reviewer can verify quickly.
 - The final report must contain these sections in order, using either Chinese or English headings that are easy to recognize: Data Overview / 数据概览, Data Cleaning Notes / 数据清洗说明, Methods / 方法说明, Core Statistical Results / 主要统计结果, Figure Interpretation / 图表解释, Limitations / 局限性, Conclusion / 结论.
 - The Figure Interpretation section must include 1-3 direct sentences for every cited figure. Do not place a figure reference in the report without an adjacent interpretation sentence.
+- Figure interpretation must describe both the statistical takeaway and the visual feature itself.
+- For a boxplot, explicitly mention what the median, interquartile spread, overlap or separation between groups, and visible outliers imply.
+- For a bar chart with error bars, explicitly state what the bars summarize and what the error bars represent (for example confidence intervals or another printed uncertainty measure).
+- If a hypothesis test is used, briefly state the null hypothesis in plain language when introducing or interpreting the test result.
+- For Mann-Whitney U or Kruskal-Wallis, do not only report significance; explicitly state that the null hypothesis is no systematic distributional difference between groups.
+- For Kruskal-Wallis in particular, state in plain language which groups are being compared and that the null hypothesis is that their distributions do not differ systematically.
 - The Limitations section must mention at least one concrete boundary such as small sample size, non-causal interpretation, missing-value handling impact, outlier sensitivity, or paired/multi-group interpretation limits.
 - For a two-group comparison, explicitly write the observed difference, the sample-size or design limitation, and a non-causal interpretation.
 - For paired or pre-post data, explicitly write that the same subjects were measured before and after, and interpret the result as within-subject change.
 - For time-trend data, explicitly write that the report describes the observed trend only and does not establish mechanism or intervention effect.
 - For outlier-sensitive data, explicitly write how outliers were handled and whether the conclusion depends on them.
+- For correlation tasks that also compare cohorts or groups with a rank-based test, explicitly write that the cohort comparison is an independent-group comparison and state the Kruskal-Wallis null hypothesis in plain language before interpreting the result.
+- For correlation tasks with cohort-colored figures, describe cohort separation as an observed association pattern only and explicitly state near the figure interpretation that the visual pattern does not show that cohort membership caused marker differences.
+- Before action "finish", treat the following checklist as a literal contract and satisfy every item.
+- <Report_Contract_Checklist>
+  - Data Overview exists.
+  - Data Cleaning Notes exists and states the concrete cleaning choices.
+  - Methods exists and states the task-relevant data structure.
+  - Core Statistical Results exists and highlights the main test.
+  - Figure Interpretation exists and every cited figure has nearby interpretation sentences.
+  - Limitations exists and states at least one concrete interpretation boundary.
+  - Conclusion exists and stays non-causal unless causality is truly justified.
+  - Two-group tasks explicitly state when the design is not paired or pre-post.
+  - Paired or before-after tasks explicitly state that the same subjects were measured repeatedly.
+  - Missing-value or outlier-sensitive tasks explicitly state the handling strategy and its impact.
+  - Rank-based hypothesis tests state the null hypothesis in plain language.
+  - Knowledge-based claims use only valid inline citations from the evidence register.
+- </Report_Contract_Checklist>
 
 Hard prohibitions:
 - Do not analyze the raw dataset before saving cleaned_data.csv.
 - Do not keep using the raw file as the main analytical input during Stage 2.
 - Do not save charts outside `{figures_dir}`.
 - Do not reference old outputs/ paths in the final report unless they are inside this run directory.
+- Do not finish immediately after a PythonInterpreterTool error. If the latest Python step failed, fix the code and call PythonInterpreterTool again.
+- Do not manually compute or invent final statistics after a failed Stage 2 tool call; the final report must be grounded in a successful Stage 2 observation.
 
 Execution rules:
 1. Use PythonInterpreterTool whenever you need to read data, clean data, compute statistics, run hypothesis tests, fit models, or generate plots.
@@ -123,20 +149,21 @@ Execution rules:
 9. If there are too many categories, prefer horizontal bar charts, top-k subsets, or larger figure sizes instead of forcing all labels into one crowded view.
 10. Extremely important: your Python code must use print() for every result, statistic, p-value, interpretation, or file path you want to observe.
 11. If a tool returns an error traceback, carefully read it, fix the code, and try again.
-12. Never invent numbers or conclusions. Every statistical claim must be grounded in tool observations.
-13. You have at most {max_steps} controller steps, so make each tool call complete and information-dense.
-14. {search_policy_block}
-15. Latency mode for this run: {latency_mode}. {fast_path_block}
-16. If the user context includes a <Retrieved_Evidence_Register> block, any knowledge-based interpretation that relies on retrieved background knowledge must include at least one inline citation label copied exactly from that register.
-17. Knowledge-based interpretation includes terminology explanations, domain meaning of indicators, literature background, and guideline-style interpretation.
-18. Do not invent citation labels, source names, page numbers, table ids, or evidence ids. Use only the citation labels supplied in the evidence register.
-19. Statistical findings computed directly from the dataset do not require RAG citations unless you explicitly combine them with retrieved background knowledge in the same conclusion.
-20. If the user context includes a <Success_Memory_Context> block, treat it as historical success memory only: reusable preferences, previously accepted constraints, and prior framing hints.
-21. If the user context includes a <Failure_Memory_Context> block, treat it as negative memory only: mistakes to avoid, hard reviewer or audit rules, and extra checks to perform before finishing.
-22. Neither success memory nor failure memory is direct evidence for the current dataset. If memory conflicts with the current data or retrieved evidence, follow the current data and current evidence.
-23. Failure memory is for guardrails only. Do not use it as domain knowledge, factual support, or a substitute for computation.
-24. Do not cite success memory or failure memory as if they were retrieved evidence. Inline citations may only use labels from <Retrieved_Evidence_Register>.
-25. Before action "finish", run a self-check: the canonical cleaned_data.csv was saved in Stage 1, explicitly reloaded in a later Python step, every cited figure has a direct interpretation sentence, and the report states the main limitation or interpretation boundary.
+12. Prefer f-strings or comma-separated print() calls in Python code. If you use old-style `%` formatting, escape literal percent signs such as `95%% CI`.
+13. Never invent numbers or conclusions. Every statistical claim must be grounded in successful tool observations.
+14. You have at most {max_steps} controller steps, so make each tool call complete and information-dense.
+15. {search_policy_block}
+16. Latency mode for this run: {latency_mode}. {fast_path_block}
+17. If the user context includes a <Retrieved_Evidence_Register> block, any knowledge-based interpretation that relies on retrieved background knowledge must include at least one inline citation label copied exactly from that register.
+18. Knowledge-based interpretation includes terminology explanations, domain meaning of indicators, literature background, and guideline-style interpretation.
+19. Do not invent citation labels, source names, page numbers, table ids, or evidence ids. Use only the citation labels supplied in the evidence register.
+20. Statistical findings computed directly from the dataset do not require RAG citations unless you explicitly combine them with retrieved background knowledge in the same conclusion.
+21. If the user context includes a <Success_Memory_Context> block, treat it as historical success memory only: reusable preferences, previously accepted constraints, and prior framing hints.
+22. If the user context includes a <Failure_Memory_Context> block, treat it as negative memory only: mistakes to avoid, hard reviewer or audit rules, and extra checks to perform before finishing.
+23. Neither success memory nor failure memory is direct evidence for the current dataset. If memory conflicts with the current data or retrieved evidence, follow the current data and current evidence.
+24. Failure memory is for guardrails only. Do not use it as domain knowledge, factual support, or a substitute for computation.
+25. Do not cite success memory or failure memory as if they were retrieved evidence. Inline citations may only use labels from <Retrieved_Evidence_Register>.
+26. Before action "finish", run a self-check against both the stage-execution contract and the Report_Contract_Checklist.
 
 Official plotting protocol / 官方绘图协议:
 - The only standard save API is save_figure(output_path).
@@ -226,11 +253,10 @@ def build_reviewer_prompt(review_mode: str, *, focus_major_issues: bool = False)
         reviewer_role = "You are an exceptionally strict reviewer from a top-tier journal ecosystem such as Nature, Science, or Cell."
         checklist = """Review checklist:
 - Verify that figure references are present, coherent, and point to this run's actual figure paths.
-- Reject immediately if the report cites a figure but does not explain what that figure shows in direct prose.
-- If Generated artifacts evidence confirms that figures were saved in this run and artifact validation is green, do not reject solely because the compressed execution trace omits plotting details.
-- Reject immediately if the report contains statistical testing but omits a clear cleaning note or omits a limitations section.
-- Reject immediately if a paired / before-after task does not state that the same subjects were measured repeatedly.
-- Reject immediately if a missing-value or outlier-sensitive task does not describe the handling strategy.
+- Do not reject solely because a valid local figure path is absolute rather than relative; focus on whether it resolves to an existing artifact for this run.
+- Treat the supplied report-contract summary as the authoritative basic-structure gate. Do not rediscover missing structure from scratch if that summary already passed.
+- The report-contract summary should already encode whether a cleaning note, a limitations section, a statement that the same subjects were measured repeatedly, and any missing-value or outlier-sensitive task handling are present.
+- If Generated artifacts evidence confirms that figures were saved in this run and the report-contract summary says figure interpretation passed, do not reject solely because the compressed execution trace omits plotting details.
 - Verify that any hypothesis test is reported with the test statistic, p-value, effect size, and 95% CI together.
 - Verify that multi-group pairwise comparisons explicitly mention Bonferroni correction or Tukey HSD when required.
 - Verify that the report does not confuse correlation with causation.
@@ -251,12 +277,14 @@ def build_reviewer_prompt(review_mode: str, *, focus_major_issues: bool = False)
         reviewer_role = "You are a rigorous reviewer for a high-quality technical or academic report."
         checklist = """Review checklist:
 - Verify that figure references are present, coherent, and point to this run's actual figure paths.
-- Reject immediately if the report cites a figure but does not explain what that figure shows in direct prose.
-- If Generated artifacts evidence confirms that figures were saved in this run and artifact validation is green, do not reject solely because the compressed execution trace omits plotting details.
-- Reject immediately if the report contains statistical testing but omits a clear cleaning note or omits a limitations section.
-- Reject immediately if a paired / before-after task does not state that the same subjects were measured repeatedly.
-- Reject immediately if a missing-value or outlier-sensitive task does not describe the handling strategy.
+- Do not reject solely because a valid local figure path is absolute rather than relative; focus on whether it resolves to an existing artifact for this run.
+- Treat the supplied report-contract summary as the authoritative basic-structure gate. Do not rediscover missing structure from scratch if that summary already passed.
+- The report-contract summary should already encode whether a cleaning note, a limitations section, a statement that the same subjects were measured repeatedly, and any missing-value or outlier-sensitive task handling are present.
+- If Generated artifacts evidence confirms that figures were saved in this run and the report-contract summary says figure interpretation passed, do not reject solely because the compressed execution trace omits plotting details.
 - Verify that major hypothesis tests are not reported as isolated p-values.
+- Do not reject for minor wording, extra-polish suggestions, or optional citations when the report-contract summary passed and citations_required is false.
+- Do not require additional outlier-detection methods if the report already states the concrete outlier rule used and no rows were removed.
+- For correlation/cohort tasks, accept conservative association wording when the report clearly states that the cohort pattern is observational and non-causal.
 - Verify that there are no obvious logical errors, broken artifact references, or contradictions with the execution trace.
 - Verify that the report does not confuse correlation with causation in a plainly misleading way.
 - Verify that the report does not cite files, figures, or cleaned-data paths outside the current run directory contract.
@@ -280,14 +308,14 @@ def build_reviewer_prompt(review_mode: str, *, focus_major_issues: bool = False)
 
 You are not the analyst. You are an independent statistical and logical reviewer.
 
-Your task is to review the candidate final_report.md, together with the provided dataset metadata, execution-trace summary, and artifact-validation summary.
+Your task is to review the candidate final_report.md, together with the provided dataset metadata, execution-trace summary, artifact-validation summary, and report-contract summary.
 
 {checklist}
 One-pass review principle:
 - You must list all major visible rejection reasons in this round.
 - Do not intentionally hold back major problems for a later round if they are already visible now.
 - Your critique must be structured as an actionable numbered list so that the analyst can respond point by point.
-- Focus on missing structure, missing explanation, and missing task alignment before style polish.
+- Focus on high-level statistical, logical, evidence, and interpretation issues after the basic report contract has already been checked.
 - Prefer critique items such as "缺少清洗说明", "缺少局限性", "图表已引用但未解释", "未说明配对结构", and "未说明缺失值/异常值处理" over vague phrases.
 {focus_block}
 
@@ -353,6 +381,7 @@ def build_observation_prompt(
 
 Read the observation carefully.
 - If the tool returned an error or incomplete result, fix your Python code or revise the search query and call the tool again.
+- If the latest PythonInterpreterTool observation has status=error or includes a traceback, do not finish. You must call PythonInterpreterTool again with corrected code.
 - If Stage 1 has not yet saved cleaned_data.csv successfully, do not move to Stage 2.
 - If the latest visible evidence does not prove that a later Python step explicitly reloaded the canonical cleaned_data.csv path, do not finish yet.
 - If you already ran hypothesis tests but the observation does not show effect sizes, 95% CIs, or the required multiple-comparison correction details, do not finish yet.

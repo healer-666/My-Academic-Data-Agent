@@ -16,6 +16,7 @@ from .runtime_models import (
     AgentStepTrace,
     AnalystRoundRecord,
     ArtifactValidationResult,
+    ReportContractCheckResult,
     ReviewRecord,
     RunContext,
     StageExecutionAuditResult,
@@ -183,11 +184,13 @@ def save_agent_trace(
     memory_payload: dict[str, object] | None = None,
     failure_memory_payload: dict[str, object] | None = None,
     execution_audit: StageExecutionAuditResult | None = None,
+    report_contract_check: ReportContractCheckResult | None = None,
 ) -> Path:
     active_rag_payload = dict(rag_payload or {})
     active_memory_payload = dict(memory_payload or {})
     active_failure_memory_payload = dict(failure_memory_payload or {})
     active_execution_audit = execution_audit or StageExecutionAuditResult(status="not_checked")
+    active_report_contract = report_contract_check or ReportContractCheckResult()
     payload = {
         "run_metadata": {
             "timestamp": datetime.now().isoformat(timespec="seconds"),
@@ -226,6 +229,7 @@ def save_agent_trace(
                 "report_path": round_record.report_path.as_posix(),
                 "step_traces": [asdict(trace) for trace in round_record.step_traces],
                 "execution_audit": round_record.execution_audit.to_trace_dict(),
+                "report_contract_check": round_record.report_contract_check.to_trace_dict(),
             }
             for round_record in analysis_rounds
         ],
@@ -278,6 +282,7 @@ def save_agent_trace(
             "stage_contract_passed": artifact_validation.stage_contract_passed,
         },
         "execution_audit": active_execution_audit.to_trace_dict(),
+        "report_contract_check": active_report_contract.to_trace_dict(),
         "search_status": search_status,
         "review_status": review_status,
         "timing_breakdown": dict(timing_breakdown),

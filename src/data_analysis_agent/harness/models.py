@@ -48,6 +48,9 @@ class EvalRunSummary:
     workflow_complete: bool
     execution_audit_status: str
     execution_audit_passed: bool
+    report_contract_passed: bool
+    report_contract_issue_count: int
+    report_contract_issue_types: tuple[str, ...]
     failure_types: tuple[str, ...]
     primary_failure_type: str
     key_check_results: dict[str, bool]

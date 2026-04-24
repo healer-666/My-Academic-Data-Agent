@@ -39,6 +39,9 @@ TASK_SPECIFIC_HINTS = {
     "two_group_small_sample": (
         "Treat this as a small-sample two-group comparison and explicitly warn about sample-size limits.",
         "Do not turn an observed group difference into a causal claim.",
+        "If you use a boxplot, explain the median, interquartile spread, group separation, and whether any visible outliers appear.",
+        "If you use bars with error bars, explain what the bars summarize and what the error bars represent.",
+        "If you use Mann-Whitney U, state the null hypothesis in plain language before interpreting the result.",
     ),
     "missing_values_by_group": (
         "Describe the missing-value pattern before formal analysis and state the exact cleaning rule used.",
@@ -47,6 +50,7 @@ TASK_SPECIFIC_HINTS = {
     "time_series_trend_clean": (
         "Respect temporal order in both methods and charts.",
         "Do not claim a mechanism or intervention effect beyond the observed trend in the table.",
+        "Include this explicit boundary sentence: This report describes an observed trend only and does not establish a mechanism or intervention effect.",
     ),
     "outlier_sensitive_measurement": (
         "Check for outliers explicitly and state whether they were retained, excluded, or only flagged.",
@@ -55,6 +59,7 @@ TASK_SPECIFIC_HINTS = {
     "correlation_without_causality": (
         "Use correlation language only; do not write the result as causation.",
         "Explain the visible cohort pattern, but keep the interpretation descriptive.",
+        "If you use Kruskal-Wallis to compare cohorts, explicitly state in plain language that the null hypothesis is that cohort distributions do not differ systematically.",
     ),
     "multi_group_with_variance_shift": (
         "Compare both central tendency and spread; do not focus on mean difference alone.",

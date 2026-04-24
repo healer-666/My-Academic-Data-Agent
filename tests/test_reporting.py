@@ -38,6 +38,23 @@ class ReportingTests(unittest.TestCase):
         self.assertEqual(result.telemetry.cleaned_data_path, "outputs/run/data/cleaned_data.csv")
         self.assertEqual(result.telemetry.figures_generated, ("outputs/run/figures/review_round_1/chart.png",))
 
+    def test_valid_telemetry_normalizes_windows_style_paths(self):
+        raw = (
+            "# Data Analysis Report\n\nReport body.\n\n"
+            '<telemetry>{"methods":["spearman"],"domain":"science","tools_used":["PythonInterpreterTool"],'
+            '"search_used":false,"search_notes":"not used","cleaned_data_saved":true,'
+            '"cleaned_data_path":"outputs\\\\run\\\\data\\\\cleaned_data.csv",'
+            '"figures_generated":["figures\\\\review_round_2\\\\chart.png","chart2.png"]}</telemetry>'
+        )
+
+        result = extract_report_and_telemetry(raw)
+
+        self.assertEqual(result.telemetry.cleaned_data_path, "outputs/run/data/cleaned_data.csv")
+        self.assertEqual(
+            result.telemetry.figures_generated,
+            ("figures/review_round_2/chart.png", "chart2.png"),
+        )
+
     def test_malformed_telemetry_falls_back_safely(self):
         raw = "# Data Analysis Report\n\nReport body.\n\n<telemetry>{bad json}</telemetry>"
 

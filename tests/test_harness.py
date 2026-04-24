@@ -47,7 +47,6 @@ class HarnessTests(unittest.TestCase):
         figures_dir.mkdir(parents=True, exist_ok=True)
         logs_dir.mkdir(parents=True, exist_ok=True)
         report_path = run_dir / "final_report.md"
-        report_path.write_text("# Report", encoding="utf-8")
         trace_path = logs_dir / "agent_trace.json"
         trace_path.write_text("{}", encoding="utf-8")
         cleaned_data_path = data_dir / "cleaned_data.csv"
@@ -57,6 +56,17 @@ class HarnessTests(unittest.TestCase):
             chart_path = figures_dir / "chart.png"
             chart_path.write_text("fake", encoding="utf-8")
             figure_paths = (chart_path.as_posix(),)
+        report_markdown = (
+            "# Data Overview\nDemo overview.\n\n"
+            "# Data Cleaning Notes\nSaved cleaned data and normalized headers.\n\n"
+            "# Methods\nDescriptive statistics only.\n\n"
+            "# Core Statistical Results\nNo hypothesis test was run.\n\n"
+            "# Figure Interpretation\n"
+            + (f"![chart]({figure_paths[0]})\nThe chart shows the demo distribution.\n\n" if figure_paths else "No figures were generated.\n\n")
+            + "# Limitations\nDemo limitation.\n\n"
+            + "# Conclusion\nDemo conclusion.\n"
+        )
+        report_path.write_text(report_markdown, encoding="utf-8")
         data_context = DataContextSummary(
             data_path=Path("data/eval/demo.csv"),
             absolute_path=(PROJECT_ROOT / "data" / "eval" / "demo.csv"),
@@ -70,8 +80,8 @@ class HarnessTests(unittest.TestCase):
         )
         return AnalysisRunResult(
             data_context=data_context,
-            raw_result="# Report",
-            report_markdown="# Report",
+            raw_result=report_markdown,
+            report_markdown=report_markdown,
             report_path=report_path,
             output_dir=run_dir,
             run_dir=run_dir,
@@ -116,6 +126,9 @@ class HarnessTests(unittest.TestCase):
             execution_audit_status="passed" if accepted else "failed",
             execution_audit_passed=accepted,
             execution_audit_findings=() if accepted else ("No later Python step explicitly reloaded cleaned_data.csv.",),
+            report_contract_passed=accepted,
+            report_contract_blocking_issues=(),
+            report_contract_issue_types=(),
         )
 
     def test_load_task_spec_accepts_json_style_yaml(self):
@@ -151,6 +164,8 @@ class HarnessTests(unittest.TestCase):
         self.assertTrue(summary.key_check_results["must_generate_trace"])
         self.assertEqual(payload["primary_failure_type"], "none")
         self.assertEqual(payload["figure_count"], 1)
+        self.assertTrue(summary.report_contract_passed)
+        self.assertEqual(payload["report_contract_issue_types"], [])
 
     def test_baseline_aggregate_save_load_and_compare(self):
         run_dir = self._workspace_case_dir() / "outputs" / "run_demo"
@@ -199,6 +214,12 @@ class HarnessTests(unittest.TestCase):
             review_critique="1. 缺少清洗说明和局限性。2. 图表已引用但未解释。",
             execution_audit_status="passed",
             execution_audit_passed=True,
+            report_contract_passed=False,
+            report_contract_blocking_issues=(
+                "Missing required report sections: limitations.",
+                "At least one cited figure is not accompanied by a nearby interpretation sentence that explains the visual evidence.",
+            ),
+            report_contract_issue_types=("report_structure_failure", "figure_interpretation_failure"),
         )
 
         failure_types = classify_failure_types(failed_result)

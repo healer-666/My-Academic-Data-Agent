@@ -30,16 +30,23 @@ class PromptGuardrailTests(unittest.TestCase):
         self.assertIn("Tukey HSD", prompt)
         self.assertIn("Never report an isolated p-value", prompt)
         self.assertIn("strictly separate correlation from causation", prompt)
-        self.assertIn("统计学治理说明", prompt)
         self.assertIn("<Retrieved_Evidence_Register>", prompt)
         self.assertIn("<Success_Memory_Context>", prompt)
         self.assertIn("<Failure_Memory_Context>", prompt)
         self.assertIn("later Python step", prompt)
         self.assertIn("paired or repeated-measures", prompt)
         self.assertIn("bare image references", prompt)
-        self.assertIn("Data Cleaning Notes / 数据清洗说明", prompt)
-        self.assertIn("Figure Interpretation / 图表解释", prompt)
-        self.assertIn("Limitations / 局限性", prompt)
+        self.assertIn("Data Cleaning Notes /", prompt)
+        self.assertIn("Figure Interpretation /", prompt)
+        self.assertIn("Limitations /", prompt)
+        self.assertIn("For a boxplot", prompt)
+        self.assertIn("For a bar chart with error bars", prompt)
+        self.assertIn("state the null hypothesis in plain language", prompt)
+        self.assertIn("Mann-Whitney U or Kruskal-Wallis", prompt)
+        self.assertIn("unsupported domain-specific mechanisms", prompt)
+        self.assertIn("cohort membership caused marker differences", prompt)
+        self.assertIn("Do not finish immediately after a PythonInterpreterTool error", prompt)
+        self.assertIn("95%% CI", prompt)
 
     def test_system_prompt_can_include_background_literature_context(self):
         prompt = build_system_prompt(
@@ -49,11 +56,11 @@ class PromptGuardrailTests(unittest.TestCase):
             logs_dir="outputs/run_demo/logs",
             max_steps=6,
             tool_descriptions="- PythonInterpreterTool: Execute Python code.",
-            background_literature_context="BMI 代表身体质量指数。",
+            background_literature_context="BMI glossary note.",
         )
 
         self.assertIn("<Background_Literature_Context>", prompt)
-        self.assertIn("BMI 代表身体质量指数", prompt)
+        self.assertIn("BMI glossary note.", prompt)
 
     def test_observation_prompt_blocks_p_value_only_finishes(self):
         prompt = build_observation_prompt(
@@ -65,6 +72,7 @@ class PromptGuardrailTests(unittest.TestCase):
         self.assertIn("effect sizes", prompt)
         self.assertIn("95% CIs", prompt)
         self.assertIn("do not finish yet", prompt)
+        self.assertIn("status=error", prompt)
         self.assertIn("later Python step explicitly reloaded", prompt)
         self.assertIn("figure references without direct textual interpretation", prompt)
 
@@ -85,6 +93,9 @@ class PromptGuardrailTests(unittest.TestCase):
         self.assertIn("success memory", publication_prompt)
         self.assertIn("failure memory", publication_prompt)
         self.assertIn("evidence_findings", publication_prompt)
+        self.assertIn("absolute rather than relative", standard_prompt)
+        self.assertIn("optional citations", standard_prompt)
+        self.assertIn("additional outlier-detection methods", standard_prompt)
         self.assertIn("cleaning note", publication_prompt)
         self.assertIn("limitations section", publication_prompt)
         self.assertIn("same subjects were measured repeatedly", publication_prompt)

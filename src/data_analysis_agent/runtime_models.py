@@ -126,6 +126,57 @@ class StageExecutionAuditResult:
 
 
 @dataclass(frozen=True)
+class ReportContractCheckResult:
+    passed: bool = True
+    blocking_issues: tuple[str, ...] = ()
+    section_presence: dict[str, bool] = field(default_factory=dict)
+    figure_reference_count: int = 0
+    figure_interpretation_hit_count: int = 0
+    task_alignment_flags: dict[str, bool] = field(default_factory=dict)
+    statistics_flags: dict[str, bool] = field(default_factory=dict)
+    evidence_flags: dict[str, bool] = field(default_factory=dict)
+    issue_types: tuple[str, ...] = ()
+
+    def to_trace_dict(self) -> dict[str, object]:
+        return {
+            "passed": self.passed,
+            "blocking_issues": list(self.blocking_issues),
+            "section_presence": dict(self.section_presence),
+            "figure_reference_count": self.figure_reference_count,
+            "figure_interpretation_hit_count": self.figure_interpretation_hit_count,
+            "task_alignment_flags": dict(self.task_alignment_flags),
+            "statistics_flags": dict(self.statistics_flags),
+            "evidence_flags": dict(self.evidence_flags),
+            "issue_types": list(self.issue_types),
+        }
+
+
+@dataclass(frozen=True)
+class RevisionBrief:
+    source: str
+    blocking_issues: tuple[str, ...] = ()
+    suggested_actions: tuple[str, ...] = ()
+    carry_over_constraints: tuple[str, ...] = ()
+    next_round_figures_dir: str = ""
+
+    def to_user_message(self) -> str:
+        lines = [f"[Structured revision brief | source={self.source}]"]
+        if self.blocking_issues:
+            lines.append("Blocking issues:")
+            lines.extend(f"{index}. {item}" for index, item in enumerate(self.blocking_issues, start=1))
+        if self.suggested_actions:
+            lines.append("Required actions:")
+            lines.extend(f"- {item}" for item in self.suggested_actions)
+        if self.carry_over_constraints:
+            lines.append("Carry-over constraints:")
+            lines.extend(f"- {item}" for item in self.carry_over_constraints)
+        if self.next_round_figures_dir:
+            lines.append(f"All new figures for the next round must be saved under: {self.next_round_figures_dir}")
+        lines.append("Do not repeat any blocking issue that has already been called out.")
+        return "\n".join(lines)
+
+
+@dataclass(frozen=True)
 class ParsedAgentReply:
     action: str
     decision: str
@@ -193,6 +244,7 @@ class AnalystRoundRecord:
     report_path: Path
     step_traces: tuple[AgentStepTrace, ...]
     execution_audit: StageExecutionAuditResult = StageExecutionAuditResult()
+    report_contract_check: ReportContractCheckResult = ReportContractCheckResult()
 
 
 @dataclass(frozen=True)
@@ -272,3 +324,6 @@ class AnalysisRunResult:
     execution_audit_status: str = "not_checked"
     execution_audit_passed: bool = False
     execution_audit_findings: tuple[str, ...] = ()
+    report_contract_passed: bool = False
+    report_contract_blocking_issues: tuple[str, ...] = ()
+    report_contract_issue_types: tuple[str, ...] = ()

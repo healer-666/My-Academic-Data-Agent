@@ -297,6 +297,49 @@ class RagServiceTests(unittest.TestCase):
         self.assertEqual(retrieval_result.keyword_match_count, 1)
         self.assertEqual(retrieval_result.source_names, ("keyword_glossary.md",))
 
+    def test_rag_service_indexes_keyword_only_when_embedding_unconfigured(self):
+        case_dir = self._workspace_case_dir()
+        ref_path = case_dir / "keyword_glossary.md"
+        ref_path.write_text("Keyword only marker explanation.", encoding="utf-8")
+        runtime_config = RuntimeConfig(
+            model_id="demo-model",
+            api_key="demo-key",
+            base_url="https://example.com/v1",
+        )
+
+        class _NoEmbeddingClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def embed_texts(self, texts):
+                raise AssertionError("Embedding should not be called for keyword-only indexing.")
+
+        with patch("data_analysis_agent.rag.service.OpenAIEmbeddingClient", _NoEmbeddingClient), patch(
+            "data_analysis_agent.rag.service.ChromaVectorStore",
+            _FakeVectorStore,
+        ), patch(
+            "data_analysis_agent.rag.service.KeywordIndexStore",
+            _FakeKeywordIndexStore,
+        ):
+            service = RagService(
+                runtime_config=runtime_config,
+                knowledge_base_dir=case_dir / "knowledge_base",
+            )
+            index_result = service.index_files((ref_path,))
+            retrieval_result = service.retrieve(
+                retrieval_query="keywordonly marker",
+                dense_query="keywordonly marker",
+                keyword_query="keywordonly marker",
+                query_terms=("keywordonly", "marker"),
+                column_terms=("marker",),
+                top_k=4,
+            )
+
+        self.assertEqual(index_result.status, "completed")
+        self.assertIn("keyword retrieval only", " ".join(index_result.warnings))
+        self.assertEqual(retrieval_result.status, "retrieved")
+        self.assertEqual(retrieval_result.keyword_match_count, 1)
+
     def test_rag_service_builds_ephemeral_table_candidates_from_parsed_document(self):
         case_dir = self._workspace_case_dir()
         parsed_path = case_dir / "parsed_document.json"

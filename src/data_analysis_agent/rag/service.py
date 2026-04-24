@@ -63,22 +63,28 @@ class RagService:
             if not chunks:
                 warnings.append(f"Knowledge file {source.name} produced no chunks after splitting.")
                 continue
-            embeddings = self.embedding_client.embed_texts(chunk.text for chunk in chunks)
-            if len(embeddings) != len(chunks):
-                raise ValueError(f"Embedding response count mismatch for {source.name}.")
             doc_id = documents[0].doc_id
-            chunk_count = self.vector_store.replace_document(
-                doc_id=doc_id,
-                chunks=chunks,
-                embeddings=embeddings,
-            )
+            chunk_count = 0
+            if self.runtime_config.embedding_configured:
+                embeddings = self.embedding_client.embed_texts(chunk.text for chunk in chunks)
+                if len(embeddings) != len(chunks):
+                    raise ValueError(f"Embedding response count mismatch for {source.name}.")
+                chunk_count = self.vector_store.replace_document(
+                    doc_id=doc_id,
+                    chunks=chunks,
+                    embeddings=embeddings,
+                )
+            else:
+                warnings.append(
+                    f"Embedding configuration is incomplete; indexed {source.name} for keyword retrieval only."
+                )
             self.keyword_index.replace_document(
                 doc_id=doc_id,
                 chunks=chunks,
             )
-            if chunk_count:
+            if chunk_count or chunks:
                 indexed_documents.append(source.name)
-                total_chunks += chunk_count
+                total_chunks += chunk_count or len(chunks)
         status = "completed" if indexed_documents else "skipped"
         return RagIndexResult(
             status=status,

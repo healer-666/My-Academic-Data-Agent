@@ -8,12 +8,18 @@ from pathlib import Path
 from typing import Any
 
 from .data_context import DataContextSummary
+from .report_contract import (
+    check_report_contract,
+    format_report_contract_summary,
+    inspect_report_structure as _inspect_report_structure_service,
+)
 from .reporting import EvidenceCoverage, ReportTelemetry, _iter_markdown_sections
 from .rag.models import RetrievedChunk
 from .runtime_models import (
     AgentStepTrace,
     ArtifactValidationResult,
     ParsedReviewerReply,
+    ReportContractCheckResult,
     ReviewerEvidenceFinding,
     ReviewRecord,
     StageExecutionAuditResult,
@@ -21,138 +27,25 @@ from .runtime_models import (
 )
 from .vision_review import VisualReviewResult
 
-
-_REPORT_SECTION_HINTS: dict[str, tuple[str, ...]] = {
-    "data_overview": ("\u6570\u636e\u6982\u89c8", "data overview", "overview"),
-    "cleaning_notes": (
-        "\u6570\u636e\u6e05\u6d17",
-        "\u6e05\u6d17\u8bf4\u660e",
-        "data cleaning",
-        "cleaning notes",
-        "preprocessing",
-    ),
-    "methods": ("\u65b9\u6cd5\u8bf4\u660e", "methods", "method"),
-    "core_results": (
-        "\u4e3b\u8981\u7edf\u8ba1\u7ed3\u679c",
-        "\u6838\u5fc3\u7edf\u8ba1\u7ed3\u679c",
-        "results",
-        "statistical results",
-    ),
-    "figure_interpretation": (
-        "\u56fe\u8868\u89e3\u91ca",
-        "\u7ed3\u679c\u89e3\u91ca",
-        "figure interpretation",
-        "result interpretation",
-    ),
-    "limitations": ("\u5c40\u9650\u6027", "\u9650\u5236", "limitations", "limitation"),
-    "conclusion": ("\u7ed3\u8bba", "conclusion"),
-}
-_LIMITATION_BODY_HINTS = (
-    "\u5c40\u9650",
-    "\u9650\u5236",
-    "sample size",
-    "small sample",
-    "non-causal",
-    "limitation",
-    "limitations",
-)
-_FIGURE_WORD_HINTS = ("\u56fe", "figure", "chart", "plot")
-_FIGURE_INTERPRETATION_HINTS = (
-    "\u663e\u793a",
-    "\u8868\u660e",
-    "\u8bf4\u660e",
-    "\u63d0\u793a",
-    "shows",
-    "indicates",
-    "suggests",
-    "reveals",
-)
-_PAIRED_HINTS = (
-    "\u914d\u5bf9",
-    "\u524d\u540e",
-    "\u540c\u4e00\u5bf9\u8c61",
-    "before-after",
-    "pre-post",
-    "paired",
-    "repeated",
-)
-_MISSING_HINTS = ("\u7f3a\u5931", "missing", "impute", "dropna")
-_OUTLIER_HINTS = ("\u5f02\u5e38\u503c", "\u79bb\u7fa4", "outlier", "extreme value")
-_SMALL_SAMPLE_HINTS = ("\u5c0f\u6837\u672c", "sample size", "small sample", "n=")
-
-
-def _contains_any(text: str, keywords: tuple[str, ...]) -> bool:
-    normalized = str(text or "").lower()
-    return any(keyword.lower() in normalized for keyword in keywords)
-
-
 def _inspect_report_structure(report_markdown: str) -> dict[str, object]:
-    sections = _iter_markdown_sections(report_markdown or "")
-    normalized_sections = [(str(title or "").lower(), str(body or "").lower()) for title, body in sections]
-    normalized_report = str(report_markdown or "").lower()
-    section_presence: dict[str, bool] = {}
-    for key, hints in _REPORT_SECTION_HINTS.items():
-        section_presence[key] = any(any(hint.lower() in title for hint in hints) for title, _ in normalized_sections) or any(
-            re.search(rf"^#+\s+.*{re.escape(hint.lower())}", normalized_report, re.MULTILINE) is not None
-            for hint in hints
-        )
-    if not section_presence["limitations"]:
-        section_presence["limitations"] = any(
-            _contains_any(body, _LIMITATION_BODY_HINTS) for _, body in normalized_sections
-        ) or _contains_any(normalized_report, _LIMITATION_BODY_HINTS)
-
-    figure_reference_count = len(re.findall(r"!\[[^\]]*\]\(([^)]+)\)", report_markdown or ""))
-    figure_interpretation_hit_count = sum(
-        1
-        for line in (report_markdown or "").splitlines()
-        if _contains_any(line, _FIGURE_WORD_HINTS) and _contains_any(line, _FIGURE_INTERPRETATION_HINTS)
-    )
-    return {
-        "section_presence": section_presence,
-        "figure_reference_count": figure_reference_count,
-        "figure_interpretation_hit_count": figure_interpretation_hit_count,
-        "paired_or_prepost_mentioned": _contains_any(normalized_report, _PAIRED_HINTS),
-        "missing_value_handling_mentioned": _contains_any(normalized_report, _MISSING_HINTS),
-        "outlier_handling_mentioned": _contains_any(normalized_report, _OUTLIER_HINTS),
-        "small_sample_limitation_mentioned": _contains_any(normalized_report, _SMALL_SAMPLE_HINTS),
-    }
+    return _inspect_report_structure_service(report_markdown)
 
 
-def _format_report_structure_summary(
-    report_markdown: str,
-    *,
-    task_type: str = "",
-    task_expectations: tuple[str, ...] = (),
-) -> str:
-    inspection = _inspect_report_structure(report_markdown)
-    section_presence = inspection["section_presence"]
-    lines = [
-        f"- task_type: {task_type or 'not_provided'}",
-        "- task_expectations:",
-    ]
-    if task_expectations:
-        lines.extend(f"  - {item}" for item in task_expectations)
-    else:
-        lines.append("  - none")
-    lines.extend(
-        [
-            "- report_structure_presence:",
-            f"  - data_overview: {section_presence['data_overview']}",
-            f"  - cleaning_notes: {section_presence['cleaning_notes']}",
-            f"  - methods: {section_presence['methods']}",
-            f"  - core_results: {section_presence['core_results']}",
-            f"  - figure_interpretation: {section_presence['figure_interpretation']}",
-            f"  - limitations: {section_presence['limitations']}",
-            f"  - conclusion: {section_presence['conclusion']}",
-            f"- figure_reference_count: {inspection['figure_reference_count']}",
-            f"- figure_interpretation_hit_count: {inspection['figure_interpretation_hit_count']}",
-            f"- paired_or_prepost_mentioned: {inspection['paired_or_prepost_mentioned']}",
-            f"- missing_value_handling_mentioned: {inspection['missing_value_handling_mentioned']}",
-            f"- outlier_handling_mentioned: {inspection['outlier_handling_mentioned']}",
-            f"- small_sample_limitation_mentioned: {inspection['small_sample_limitation_mentioned']}",
-        ]
-    )
-    return "\n".join(lines)
+def _resolve_review_round_figure_path(figure_path: str, figures_dir: Path) -> Path:
+    candidate = Path(str(figure_path or "").strip())
+    if not str(candidate):
+        return figures_dir
+    if candidate.is_absolute():
+        return candidate
+
+    normalized_text = candidate.as_posix()
+    if normalized_text.startswith("figures/"):
+        return (figures_dir.parent.parent / candidate).resolve()
+    if "review_round_" in normalized_text:
+        return (figures_dir.parent / candidate).resolve()
+    if candidate.parent == Path("."):
+        return (figures_dir / candidate.name).resolve()
+    return (figures_dir.parent / candidate).resolve()
 
 
 def parse_reviewer_reply(raw_response: str, extract_first_json_object: Any) -> ParsedReviewerReply:
@@ -261,6 +154,7 @@ def build_reviewer_task(
     evidence_coverage: EvidenceCoverage | None = None,
     memory_context: str = "",
     execution_audit: StageExecutionAuditResult | None = None,
+    report_contract_check: ReportContractCheckResult | None = None,
     task_type: str = "",
     task_expectations: tuple[str, ...] = (),
 ) -> str:
@@ -273,18 +167,18 @@ def build_reviewer_task(
     trace_summary = "\n".join(trace_lines) if trace_lines else "- No execution trace available."
     missing = ", ".join(artifact_validation.missing_artifacts) if artifact_validation.missing_artifacts else "none"
     warnings = "; ".join(artifact_validation.warnings) if artifact_validation.warnings else "none"
+    figures_dir = report_path.parent / "figures" / f"review_round_{review_round}"
     round_pattern = re.compile(rf"review_round_{review_round}(?:/|\\)")
     round_figures = [figure_path for figure_path in telemetry.figures_generated if round_pattern.search(str(figure_path))]
     if not round_figures:
         round_figures = list(telemetry.figures_generated)
     figure_evidence_lines = []
     for figure_path in round_figures:
-        figure_file = Path(figure_path)
+        figure_file = _resolve_review_round_figure_path(str(figure_path), figures_dir)
         figure_evidence_lines.append(
             f"- {figure_file.name} | path={figure_file.as_posix()} | exists={figure_file.exists()}"
         )
     figures_block = "\n".join(figure_evidence_lines) if figure_evidence_lines else "- none"
-    figures_dir = report_path.parent / "figures" / f"review_round_{review_round}"
     coverage = evidence_coverage or EvidenceCoverage(status="not_checked")
     evidence_lines = []
     for chunk in evidence_register:
@@ -305,6 +199,13 @@ def build_reviewer_task(
     )
     memory_block = memory_context.strip() or "- none"
     active_execution_audit = execution_audit or StageExecutionAuditResult(status="not_checked")
+    active_report_contract = report_contract_check or check_report_contract(
+        report_markdown,
+        task_type=task_type,
+        task_expectations=task_expectations,
+        telemetry=telemetry,
+        evidence_coverage=evidence_coverage,
+    )
     audit_findings = (
         "\n".join(
             f"- step={finding.step_index if finding.step_index is not None else 'n/a'} | {finding.message}"
@@ -313,8 +214,8 @@ def build_reviewer_task(
         if active_execution_audit.findings
         else "- none"
     )
-    report_structure_summary = _format_report_structure_summary(
-        report_markdown,
+    report_structure_summary = format_report_contract_summary(
+        active_report_contract,
         task_type=task_type,
         task_expectations=task_expectations,
     )
