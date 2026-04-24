@@ -1,0 +1,114 @@
+{
+  "baseline_name": "seed_v5",
+  "created_at": "2026-04-24T17:46:25",
+  "task_count": 10,
+  "accept_rate": 1.0,
+  "workflow_complete_rate": 1.0,
+  "execution_audit_pass_rate": 1.0,
+  "review_reject_rate": 0.0,
+  "avg_step_count": 4.9,
+  "avg_duration_seconds": 113.9642,
+  "failure_type_distribution": {},
+  "task_results": [
+    {
+      "task_id": "two_group_small_sample",
+      "accepted": true,
+      "review_status": "accepted",
+      "workflow_complete": true,
+      "execution_audit_status": "passed",
+      "primary_failure_type": "none",
+      "duration_seconds": 54.779,
+      "step_count": 3
+    },
+    {
+      "task_id": "missing_values_by_group",
+      "accepted": true,
+      "review_status": "accepted",
+      "workflow_complete": true,
+      "execution_audit_status": "passed",
+      "primary_failure_type": "none",
+      "duration_seconds": 110.105,
+      "step_count": 6
+    },
+    {
+      "task_id": "time_series_trend_clean",
+      "accepted": true,
+      "review_status": "accepted",
+      "workflow_complete": true,
+      "execution_audit_status": "passed",
+      "primary_failure_type": "none",
+      "duration_seconds": 160.455,
+      "step_count": 7
+    },
+    {
+      "task_id": "outlier_sensitive_measurement",
+      "accepted": true,
+      "review_status": "accepted",
+      "workflow_complete": true,
+      "execution_audit_status": "passed",
+      "primary_failure_type": "none",
+      "duration_seconds": 84.096,
+      "step_count": 3
+    },
+    {
+      "task_id": "correlation_without_causality",
+      "accepted": true,
+      "review_status": "accepted",
+      "workflow_complete": true,
+      "execution_audit_status": "passed",
+      "primary_failure_type": "none",
+      "duration_seconds": 186.749,
+      "step_count": 7
+    },
+    {
+      "task_id": "multi_group_with_variance_shift",
+      "accepted": true,
+      "review_status": "accepted",
+      "workflow_complete": true,
+      "execution_audit_status": "passed",
+      "primary_failure_type": "none",
+      "duration_seconds": 66.807,
+      "step_count": 3
+    },
+    {
+      "task_id": "before_after_paired_measure",
+      "accepted": true,
+      "review_status": "accepted",
+      "workflow_complete": true,
+      "execution_audit_status": "passed",
+      "primary_failure_type": "none",
+      "duration_seconds": 79.268,
+      "step_count": 3
+    },
+    {
+      "task_id": "mixed_units_and_dirty_headers",
+      "accepted": true,
+      "review_status": "accepted",
+      "workflow_complete": true,
+      "execution_audit_status": "passed",
+      "primary_failure_type": "none",
+      "duration_seconds": 218.578,
+      "step_count": 7
+    },
+    {
+      "task_id": "reference_guideline_lookup",
+      "accepted": true,
+      "review_status": "accepted",
+      "workflow_complete": true,
+      "execution_audit_status": "passed",
+      "primary_failure_type": "none",
+      "duration_seconds": 44.72,
+      "step_count": 3
+    },
+    {
+      "task_id": "memory_constrained_repeat_task",
+      "accepted": true,
+      "review_status": "accepted",
+      "workflow_complete": true,
+      "execution_audit_status": "passed",
+      "primary_failure_type": "none",
+      "duration_seconds": 134.085,
+      "step_count": 7
+    }
+  ]
+}

@@ -170,6 +170,58 @@ class ReportingTests(unittest.TestCase):
         self.assertEqual(coverage.invalid_citation_labels, ("[来源: unknown.md, p.8]",))
         self.assertEqual(coverage.uncited_knowledge_sections_detected, ("Result Interpretation",))
 
+    def test_analyze_evidence_coverage_ignores_guideline_word_in_data_filename(self):
+        report = (
+            "# 数据概览\n\n"
+            "- 数据来源: `data/eval/reference_guideline_lookup.csv`\n"
+            "- 变量: marker_level\n\n"
+            "## 结论\n\n"
+            "Marker-L 是一个示例性炎症相关指标。 [来源: reference_guideline_lookup.md]\n"
+            "单次横截面数据只能支持差异性描述，不能证明因果关系。 [来源: reference_guideline_lookup.md]\n"
+        )
+
+        coverage = analyze_evidence_coverage(
+            report,
+            evidence_register=(
+                RetrievedChunk(
+                    chunk_id="chunk-1",
+                    text="Marker-L 是一个示例性炎症相关指标。",
+                    source_name="reference_guideline_lookup.md",
+                    source_path="memory/reference_guideline_lookup.md",
+                ),
+            ),
+        )
+
+        self.assertEqual(coverage.status, "covered")
+        self.assertEqual(coverage.uncited_knowledge_sections_detected, ())
+
+    def test_analyze_evidence_coverage_does_not_require_citation_for_data_only_result_interpretation(self):
+        report = (
+            "# 数据概览\n\n"
+            "Small tabular dataset.\n\n"
+            "## 结果解释\n\n"
+            "Treated 组的 Marker-L 中位数高于 control 组。"
+            "Mann-Whitney U 检验显示两组分布差异具有统计学意义。"
+            "效应量 r 达到最大值，提示两组间几乎无重叠。\n\n"
+            "## 结论\n\n"
+            "Marker-L 是一个示例性炎症相关指标。 [来源: reference_guideline_lookup.md]\n"
+        )
+
+        coverage = analyze_evidence_coverage(
+            report,
+            evidence_register=(
+                RetrievedChunk(
+                    chunk_id="chunk-1",
+                    text="Marker-L 是一个示例性炎症相关指标。",
+                    source_name="reference_guideline_lookup.md",
+                    source_path="memory/reference_guideline_lookup.md",
+                ),
+            ),
+        )
+
+        self.assertEqual(coverage.status, "covered")
+        self.assertEqual(coverage.uncited_knowledge_sections_detected, ())
+
 
 if __name__ == "__main__":
     unittest.main()

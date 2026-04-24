@@ -275,3 +275,56 @@ console log：
 - 三个 `cleaning_contract_failure` 已被逐个验证压下去。
 - 本轮没有新增大面积 prompt，而是修正了 runner 对返修轮 audit 状态的选择。
 - 下一次完整 10 任务 eval 可以作为新的 `seed_v5` 候选，但不需要在没有用户确认前立即启动。
+
+## 2026-04-24 seed_v5 candidate follow-up
+
+完整 10 任务 `seed_v5` 候选已运行完成：
+
+- baseline 文件：`eval/baselines/seed_v5.json`
+- eval report 目录：`eval/reports/20260424_165122`
+- `accept_rate`: 0.90
+- `workflow_complete_rate`: 1.00
+- `execution_audit_pass_rate`: 1.00
+- 唯一失败任务：`reference_guideline_lookup`
+- 失败类型：`citation_evidence_failure`
+
+失败 run：
+
+- `run_20260424_170114`
+
+根因：
+
+- 报告中已经存在有效引用标签 `[来源: reference_guideline_lookup.md]`。
+- `citations_present=true`，`citation_labels_valid=true`。
+- 真正阻塞项是 `uncited_knowledge_sections=true`。
+- 第一处误伤来自 `_iter_markdown_sections(...)` 只识别 `##` 标题，导致一级标题 `# 数据概览` 被归入 `Document`；数据文件名 `reference_guideline_lookup.csv` 中的 `guideline` 被误判为未引用的知识性内容。
+- 第二处误伤来自 evidence coverage 把 `## 结果解释` 中纯数据驱动的统计解释也当成知识性段落，因为“提示/说明/indicates/suggests”过于宽泛。
+
+修复：
+
+- `_iter_markdown_sections(...)` 改为识别一级及以上 Markdown 标题。
+- 英文知识词增加词边界匹配，避免路径或文件名中的 `guideline` 触发误判。
+- 收紧 `_KNOWLEDGE_CONTENT_HINTS`，不再让“提示/说明/indicates/suggests”单独触发外部知识引用要求。
+
+验证：
+
+- 对 `run_20260424_170114` 的原始报告重新执行 coverage：`covered`，contract passed。
+- 对后续失败复现 `run_20260424_171452` 的原始报告重新执行 coverage：`covered`，contract passed。
+- 新增真实单任务 smoke：`run_20260424_171942`，`accepted=true`, `review=accepted`, `audit=passed`。
+
+修复后完整重跑：
+
+- eval report 目录：`eval/reports/20260424_172726`
+- baseline 文件已刷新：`eval/baselines/seed_v5.json`
+- `task_count`: 10
+- `accept_rate`: 1.00
+- `workflow_complete_rate`: 1.00
+- `execution_audit_pass_rate`: 1.00
+- `review_reject_rate`: 0.00
+- `failure_type_distribution`: none
+
+阶段判断：
+
+- `seed_v5` 是当前第一份 10/10 accepted 的完整 baseline。
+- 本轮最后一个阻塞点不是 analyst 不会引用，而是 citation evidence coverage 对文件名和统计解释段落的误伤。
+- Chroma telemetry 仍会打印非阻塞错误日志，但不影响 eval 完成和 baseline 保存。

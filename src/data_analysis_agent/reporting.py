@@ -26,11 +26,7 @@ _KNOWLEDGE_CONTENT_HINTS = (
     "通常",
     "一般",
     "意味着",
-    "提示",
-    "说明",
     "reflects",
-    "indicates",
-    "suggests",
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -219,7 +215,7 @@ def _iter_markdown_sections(report_markdown: str) -> list[tuple[str, str]]:
     current_title = "Document"
     current_lines: list[str] = []
     for line in str(report_markdown or "").splitlines():
-        match = re.match(r"^##+\s+(.+?)\s*$", line.strip())
+        match = re.match(r"^#+\s+(.+?)\s*$", line.strip())
         if match:
             if current_lines:
                 sections.append((current_title, "\n".join(current_lines).strip()))
@@ -235,14 +231,29 @@ def _iter_markdown_sections(report_markdown: str) -> list[tuple[str, str]]:
 def _looks_like_knowledge_section(title: str, body: str) -> bool:
     normalized_title = str(title or "").strip().lower()
     normalized_body = str(body or "").strip().lower()
-    return any(hint in normalized_title for hint in _KNOWLEDGE_SECTION_HINTS) or any(
-        hint in normalized_body for hint in ("文献", "背景", "guideline", "literature", "glossary")
+    return any(hint in normalized_title for hint in _KNOWLEDGE_SECTION_HINTS) or _contains_knowledge_body_hint(
+        normalized_body,
+        ("文献", "背景", "guideline", "literature", "glossary"),
     )
 
 
 def _section_uses_knowledge_explanation(body: str) -> bool:
     normalized = str(body or "").strip().lower()
-    return any(hint in normalized for hint in _KNOWLEDGE_CONTENT_HINTS)
+    return _contains_knowledge_body_hint(normalized, _KNOWLEDGE_CONTENT_HINTS)
+
+
+def _contains_knowledge_body_hint(normalized_body: str, hints: tuple[str, ...]) -> bool:
+    for hint in hints:
+        normalized_hint = hint.lower()
+        if re.fullmatch(r"[a-z][a-z -]*", normalized_hint):
+            # Avoid treating path-like identifiers such as reference_guideline_lookup.csv
+            # as uncited background knowledge.
+            if re.search(rf"(?<![a-z0-9_]){re.escape(normalized_hint)}(?![a-z0-9_])", normalized_body):
+                return True
+            continue
+        if normalized_hint in normalized_body:
+            return True
+    return False
 
 
 def _resolve_markdown_asset_path(
