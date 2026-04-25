@@ -2,15 +2,11 @@
 
 ## 2026-04-24 后续状态
 
-后续 `seed_v4` 迭代已经把 harness 从 `seed_v2` 的 `0/10 accepted` 推进到阶段性 `7/10 accepted`。
+后续 `seed_v5` 已固化为当前稳定基线，完整 10 任务达到 `10/10 accepted`。
 
-当前主矛盾已经不再是大面积 analyst / reviewer 不对齐，而是集中到三个仍触发 `cleaning_contract_failure` 的任务：
+当前主矛盾已经不再是大面积 analyst / reviewer 不对齐，也不再是 `cleaning_contract_failure` 集中阻塞。后续改动应默认使用 `eval/baselines/seed_v5.json` 做回归对照。
 
-- `missing_values_by_group`
-- `outlier_sensitive_measurement`
-- `multi_group_with_variance_shift`
-
-详细记录见 `docs/harness_seed_v4_iteration_summary.md`。下一轮建议逐个检查这三个失败 run 的真实执行轨迹，而不是继续扩大 prompt 面积。
+详细记录见 `docs/harness_seed_v4_iteration_summary.md`。如果后续出现回归，建议继续沿用“先检查失败 run，再做最小修复”的节奏，而不是继续扩大 prompt 面积。
 
 ## 1. 复盘范围
 

@@ -93,5 +93,5 @@ These are summarized in `docs/harness_seed_v4_iteration_summary.md`.
 
 Current next target:
 
-- inspect the three remaining `cleaning_contract_failure` runs one by one
-- avoid broad prompt expansion until each failed run has a concrete root cause
+- use `seed_v5` as the current stable regression baseline
+- for future failures, inspect the concrete failed run before changing prompts or contracts

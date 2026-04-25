@@ -27,6 +27,11 @@ _SAFE_TIKTOKEN_MODEL_PREFIXES = (
     "text-embedding-ada",
 )
 
+DEEPSEEK_FLASH_MODEL_ID = "deepseek-v4-flash"
+DEEPSEEK_PRO_MODEL_ID = "deepseek-v4-pro"
+_DEEPSEEK_LEGACY_FLASH_ALIASES = {"deepseek-chat"}
+_DEEPSEEK_LEGACY_PRO_ALIASES = {"deepseek-reasoner"}
+
 
 @dataclass(frozen=True)
 class RuntimeConfig:
@@ -51,6 +56,34 @@ class RuntimeConfig:
     @property
     def embedding_configured(self) -> bool:
         return bool(self.embedding_model_id and self.embedding_api_key and self.embedding_base_url)
+
+    @property
+    def deepseek_flash_configured(self) -> bool:
+        return is_deepseek_base_url(self.base_url) and self.model_id == DEEPSEEK_FLASH_MODEL_ID
+
+
+def is_deepseek_base_url(base_url: str | None) -> bool:
+    return "api.deepseek.com" in str(base_url or "").lower()
+
+
+def resolve_text_model_id(model_id: str, base_url: str) -> str:
+    """Normalize DeepSeek text models to V4 Flash to avoid accidental Pro/thinking use."""
+
+    normalized = str(model_id or "").strip()
+    lower_model_id = normalized.lower()
+    if not is_deepseek_base_url(base_url):
+        return normalized
+
+    if (
+        lower_model_id == DEEPSEEK_FLASH_MODEL_ID
+        or lower_model_id in _DEEPSEEK_LEGACY_FLASH_ALIASES
+        or lower_model_id == DEEPSEEK_PRO_MODEL_ID
+        or lower_model_id in _DEEPSEEK_LEGACY_PRO_ALIASES
+        or lower_model_id.startswith("deepseek")
+    ):
+        return DEEPSEEK_FLASH_MODEL_ID
+
+    return normalized
 
 
 def _patched_get_encoding(self):
@@ -107,8 +140,9 @@ def load_runtime_config(env_file: Optional[str | Path] = None) -> RuntimeConfig:
     timeout = int(os.getenv("LLM_TIMEOUT", "120"))
     embedding_timeout = int(os.getenv("EMBEDDING_TIMEOUT", str(timeout)))
     vision_timeout = int(os.getenv("VISION_LLM_TIMEOUT", str(timeout)))
+    model_id = resolve_text_model_id(os.environ["LLM_MODEL_ID"], os.environ["LLM_BASE_URL"])
     config = RuntimeConfig(
-        model_id=os.environ["LLM_MODEL_ID"],
+        model_id=model_id,
         api_key=os.environ["LLM_API_KEY"],
         base_url=os.environ["LLM_BASE_URL"],
         timeout=timeout,
@@ -124,5 +158,6 @@ def load_runtime_config(env_file: Optional[str | Path] = None) -> RuntimeConfig:
     )
 
     os.environ.setdefault("LLM_TIMEOUT", str(config.timeout))
+    os.environ["LLM_MODEL_ID"] = config.model_id
     apply_token_counter_patch()
     return config

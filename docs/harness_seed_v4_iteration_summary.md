@@ -274,7 +274,7 @@ console log：
 
 - 三个 `cleaning_contract_failure` 已被逐个验证压下去。
 - 本轮没有新增大面积 prompt，而是修正了 runner 对返修轮 audit 状态的选择。
-- 下一次完整 10 任务 eval 可以作为新的 `seed_v5` 候选，但不需要在没有用户确认前立即启动。
+- 后续完整 10 任务 eval 已完成并固化为 `seed_v5` 稳定基线。
 
 ## 2026-04-24 seed_v5 candidate follow-up
 

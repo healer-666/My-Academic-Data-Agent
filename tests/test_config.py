@@ -12,7 +12,7 @@ SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
-from data_analysis_agent.config import load_runtime_config
+from data_analysis_agent.config import DEEPSEEK_FLASH_MODEL_ID, load_runtime_config
 
 
 class ConfigTests(unittest.TestCase):
@@ -58,6 +58,29 @@ class ConfigTests(unittest.TestCase):
 
         self.assertTrue(config.embedding_configured)
         self.assertEqual(config.embedding_model_id, "text-embedding-demo")
+
+    def test_load_runtime_config_maps_deepseek_chat_to_v4_flash(self):
+        env = {
+            "LLM_MODEL_ID": "deepseek-chat",
+            "LLM_API_KEY": "demo-key",
+            "LLM_BASE_URL": "https://api.deepseek.com/v1",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            config = load_runtime_config(env_file=PROJECT_ROOT / ".env.test.missing")
+            self.assertEqual(os.environ["LLM_MODEL_ID"], DEEPSEEK_FLASH_MODEL_ID)
+
+        self.assertEqual(config.model_id, DEEPSEEK_FLASH_MODEL_ID)
+
+    def test_load_runtime_config_maps_deepseek_pro_to_v4_flash(self):
+        env = {
+            "LLM_MODEL_ID": "deepseek-v4-pro",
+            "LLM_API_KEY": "demo-key",
+            "LLM_BASE_URL": "https://api.deepseek.com/v1",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            config = load_runtime_config(env_file=PROJECT_ROOT / ".env.test.missing")
+
+        self.assertEqual(config.model_id, DEEPSEEK_FLASH_MODEL_ID)
 
 
 if __name__ == "__main__":

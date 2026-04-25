@@ -83,7 +83,7 @@ except Exception as exc:  # pragma: no cover - fallback used in dependency-light
             self.args = args
             self.kwargs = kwargs
 
-        def invoke(self, messages: list[dict[str, str]]) -> str:
+        def invoke(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
             raise RuntimeError(
                 "hello_agents is not installed in the current environment. "
                 "Install project dependencies before invoking the runtime LLM client."

@@ -10,16 +10,17 @@
 </div>
 
 ## 项目简介
-**Academic-Data-Agent** 是一个基于 `hello-agents` 二次开发的分析型智能体项目。当前版本的正式主线已经收束为“**结构化表格数据分析 + 历史结果追问**”，目标不是做一个什么都能接的通用 Agent 平台，而是把一条真正可运行、可追溯、可复盘的分析流程打磨清楚。
+**Academic-Data-Agent** 是一个基于 `hello-agents` 二次开发的科研表格分析智能体工作台。当前正式主线是“**结构化表格数据分析 + 可审计报告生成 + 历史结果追问**”，重点不是做通用聊天 Agent，而是把科研数据分析流程做成可运行、可追溯、可审稿、可回归验证的工程闭环。
 
-当前项目重点解决的是这件事：
+当前项目重点解决的是：
 
 - 用户上传一份结构化表格数据
-- 系统先理解数据，再补充外部参考资料和项目历史经验
-- 进入受控分析循环，调用 Python 完成清洗、统计、绘图和报告生成
-- 通过阶段执行审计，确保正式分析基于全量清洗后数据，而不是只靠摘要“脑补”
-- 生成报告、图表、运行轨迹和审稿记录
-- 把成功经验与失败教训分层沉淀，并支持对历史分析结果继续追问
+- 系统构建数据上下文，并按需引入本地参考资料与项目记忆
+- analyst 通过受控 ReAct 循环调用 Python 完成清洗、统计、绘图和报告生成
+- execution audit 强校验 `cleaned_data.csv` 的保存与后续重读，确保正式结果来自全量清洗数据
+- report contract 与 reviewer 共同检查报告结构、统计解释、图表证据和引用可靠性
+- 每次运行都会沉淀报告、图表、trace、review 和 run summary
+- 历史问答可以围绕既有运行结果继续解释、对比和复盘
 
 当前项目支持：
 
@@ -27,59 +28,76 @@
 - 受控分析工作流：工具调用、运行轨迹、异常回退与审稿返修
 - 工程化 RAG：查询改写、混合检索、结构化切块、重排与证据登记
 - 阶段执行审计：强校验 `cleaned_data.csv` 的生成与重读
+- 共享 report contract：统一检查报告结构、图表解释、统计假设、效应量、置信区间和引用覆盖
 - 成功经验 / 失败教训 / 外部参考资料分层存储
 - 历史问答：围绕历史运行结果做单次追问或跨运行对比
 - Gradio 工作台、历史回放与工件下载
+- eval harness：固定 10 个自造表格任务，当前 `seed_v5` 稳定基线为 `10/10 accepted`
 
 ### 适用场景
 
 - 学术或科研表格数据的自动清洗、统计分析与报告生成
 - 需要保留图表、轨迹、审稿记录和历史回放的分析任务
 - 希望对历史分析结果继续提问、对比和复盘的项目型工作流
+- 希望通过固定 eval baseline 持续验证分析链路稳定性的实验型项目
 
 ---
 
 ## 核心特点
 
-### 1. 主线清晰：聚焦结构化表格分析
+### 1. 稳定基线：seed_v5 作为当前回归对照
+
+- 当前固定 10 任务 eval 已形成稳定基线：`eval/baselines/seed_v5.json`
+- `seed_v5` 结果为 `10/10 accepted`、`workflow_complete_rate=1.0`、`execution_audit_pass_rate=1.0`
+- 后续改动默认对照 `seed_v5`，优先检查真实失败 run，而不是扩大 prompt 面积
+- harness 覆盖两组比较、缺失值、异常值、多组比较、时间趋势、相关性、RAG 和 Memory
+
+### 2. 主线清晰：聚焦结构化表格分析
 
 - 当前正式输入主线只面向结构化表格数据
 - 上传后直接进入数据上下文构建、检索增强、分析执行与审稿流程
 - 仓库中仍保留部分旧的 PDF 兼容代码，但 PDF 已不再是当前版本的正式入口主线
 
-### 2. 受控分析，而不是自由聊天
+### 3. 受控分析，而不是自由聊天
 
 - 分析主循环采用 **ReAct 风格**：逐步决策、调用工具、读取观察结果、继续推进
 - 不是纯聊天式回答，也不是“先出完整计划再机械执行”的 plan-and-execute
-- 外层还有审稿返修和阶段执行审计，因此整个系统更像“分析员 + 审稿人 + 质检员”
+- 外层还有执行审计、报告契约和审稿返修，因此整体更像“分析员 + 质检员 + 审稿人”
 
-### 3. 真正基于全量数据分析
+### 4. 真正基于全量数据分析
 
 - `data_context` 只给模型提供字段、规模、样例等压缩摘要，负责“看懂这是什么数据”
 - 正式统计分析和绘图必须通过 Python 工具重新读取本地文件完成
-- 当前加入了**阶段执行审计**，会检查是否明确生成并重读 `cleaned_data.csv`
-- 如果无法证明正式分析基于清洗后的全量数据，该轮会被硬拦截，不能通过审稿
+- 阶段执行审计会检查是否明确生成并重读 `cleaned_data.csv`
+- 如果无法证明正式分析基于清洗后的全量数据，该轮不能通过审稿
 
-### 4. RAG 负责外部依据，不负责“记住一切”
+### 5. 共享报告契约：把基础质量问题前置
 
-- 当前 RAG 的职责是提供外部参考资料、背景知识和证据片段
+- `report_contract` 在 reviewer 前统一检查报告结构、图表解释、统计假设、effect size、CI 和引用覆盖
+- analyst 返修会收到结构化 revision brief，而不是只看 reviewer 的自然语言批评
+- reviewer 更聚焦高层统计逻辑、证据匹配和解释边界，减少与 analyst 的标准错位
+
+### 6. RAG 负责外部依据，不负责“记住一切”
+
+- RAG 的职责是提供外部参考资料、背景知识和证据片段
 - 它服务于分析解释、报告引用和历史问答检索底座
 - 它不直接存放运行失败经验，也不替代项目记忆
+- 当 embedding 未配置但提供了本地参考资料时，系统支持 keyword-only local RAG fallback
 
-### 5. 记忆分层更清楚
+### 7. 记忆分层更清楚
 
 - **成功经验**：只沉淀最终通过审稿、工作流完整的运行经验
 - **失败教训**：单独沉淀完整失败运行中的负向约束和禁忌清单
 - **外部参考资料**：单独进入知识库，用于 RAG 检索
 - **运行档案**：每次运行都保留完整报告、轨迹、图表和审稿记录
 
-### 6. 历史问答不是“重新分析一次”
+### 8. 历史问答不是“重新分析一次”
 
 - 历史问答读取的是历史运行工件，而不是重新执行新的数据分析代码
 - 支持围绕某次运行解释方法、图表、结论和审稿意见
 - 也支持跨多次运行做对比总结，并对非 `accepted` 的来源显式标注状态
 
-### 7. 有工作台，不只是脚本
+### 9. 有工作台，不只是脚本
 
 - Web 工作台支持发起分析、查看结果、浏览历史与继续追问
 - 自动保存报告、图表、轨迹、审稿记录和知识库状态
@@ -89,7 +107,7 @@
 
 ## 系统架构
 
-当前项目可以理解为五层结构：
+当前项目可以理解为六层结构：
 
 ### 1. 输入与数据上下文层
 
@@ -111,11 +129,18 @@
 
 ### 4. 治理与审计层
 
-- 阶段执行审计：检查是否真的基于 `cleaned_data.csv` 做正式分析
+- execution audit：检查是否真的基于 `cleaned_data.csv` 做正式分析
+- report contract：检查报告结构、统计契约、图表解释和证据引用
 - reviewer：检查结论、图表、证据与引用是否可靠
 - artifact validation：检查关键工件是否完整
 
-### 5. 展示与追问层
+### 5. Harness 与回归验证层
+
+- `eval/tasks/*.yaml` 固定 10 个自造科研表格任务
+- `eval/scripts/run_eval.py` 统一运行任务、保存 summary、生成 baseline
+- 当前稳定基线为 `seed_v5`，后续改动默认以它作为回归对照
+
+### 6. 展示与追问层
 
 - CLI 负责命令行运行
 - Gradio 工作台负责上传、结果展示、历史回放和历史问答
@@ -139,7 +164,7 @@ pip install -r requirements.txt
 在项目根目录创建 `.env` 文件：
 
 ```env
-LLM_MODEL_ID=deepseek-chat
+LLM_MODEL_ID=deepseek-v4-flash
 LLM_BASE_URL=https://api.deepseek.com/v1
 LLM_API_KEY=your_api_key_here
 LLM_TIMEOUT=120
@@ -159,6 +184,8 @@ VISION_LLM_BASE_URL=https://your-vision-endpoint/v1
 VISION_LLM_API_KEY=your_vision_api_key
 VISION_LLM_TIMEOUT=120
 ```
+
+DeepSeek 文本调用会统一落到 `deepseek-v4-flash`，并在请求中显式关闭 thinking；即使环境变量误写成 `deepseek-chat`、`deepseek-reasoner` 或 `deepseek-v4-pro`，运行时也会归一化为 Flash。
 
 ### 命令行运行
 分析表格：
@@ -234,6 +261,7 @@ print(result.failure_memory_writeback_status)
 - [项目改进路线图](./docs/项目改进路线图.md)
 - [项目主链路拆解](./docs/项目主链路拆解.md)
 - [令牌、上下文与审稿说明](./docs/令牌、上下文与审稿说明.md)
+- [Harness seed_v4 / seed_v5 迭代总结](./docs/harness_seed_v4_iteration_summary.md)
 
 ---
 
@@ -243,6 +271,7 @@ print(result.failure_memory_writeback_status)
 .
 ├── data/                          示例数据
 ├── docs/                          技术说明与学习文档
+├── eval/                          固定评测任务、baseline 与回归脚本
 ├── memory/                        外部参考资料库、成功经验与失败教训
 ├── outputs/                       运行产物与 Web 上传缓存
 ├── src/
@@ -256,6 +285,7 @@ print(result.failure_memory_writeback_status)
 │       ├── knowledge_context.py   记忆 / RAG / 证据注入层
 │       ├── prompts.py             Analyst / Reviewer Prompt
 │       ├── reporting.py           报告提取、引用解析与落盘
+│       ├── report_contract.py     共享报告契约与返修 brief
 │       ├── review_service.py      审稿任务构建与日志落地
 │       ├── rag/                   外部参考资料检索子系统
 │       ├── memory/                成功经验与失败教训子系统
@@ -293,9 +323,42 @@ outputs/run_YYYYMMDD_HHMMSS/
 - analyst 每步工具调用摘要
 - Python 工具的完整输入代码
 - 阶段执行审计结果
+- report contract 检查结果
 - RAG 检索与证据登记摘要
 - 成功经验 / 失败教训的检索与写回状态
 - 审稿历史与最终结论
+
+---
+
+## Eval 基线
+
+当前固定 harness 包含 10 个任务：
+
+```text
+before_after_paired_measure
+correlation_without_causality
+memory_constrained_repeat_task
+missing_values_by_group
+mixed_units_and_dirty_headers
+multi_group_with_variance_shift
+outlier_sensitive_measurement
+reference_guideline_lookup
+time_series_trend_clean
+two_group_small_sample
+```
+
+当前稳定基线：
+
+```text
+baseline: seed_v5
+task_count: 10
+accepted: 10/10
+workflow_complete_rate: 1.0
+execution_audit_pass_rate: 1.0
+review_reject_rate: 0.0
+```
+
+后续开发默认使用 `seed_v5` 作为回归对照。若出现失败，优先检查对应 run 的 report、trace、review log 和 contract summary，再做最小修复。
 
 ---
 
