@@ -12,6 +12,8 @@
 ## 项目简介
 **Academic-Data-Agent** 是一个基于 `hello-agents` 二次开发的科研表格分析智能体工作台。当前正式主线是“**结构化表格数据分析 + 可审计报告生成 + 历史结果追问**”，重点不是做通用聊天 Agent，而是把科研数据分析流程做成可运行、可追溯、可审稿、可回归验证的工程闭环。
 
+本项目实现了一个带有神经符号思想的可靠数据分析 LLM Agent。更准确地说，它是一个 **neuro-symbolic-inspired LLM agent for reliable statistical data analysis**：LLM、embedding、RAG 和 memory 负责语义理解、检索和生成，统计规则、JSON 协议、AST 审计、报告契约和 blocking check 负责约束、验证和返修。项目不宣称自己是完整的 neuro-symbolic learning system，也不引入逻辑推理器、知识图谱推理、规则学习或可微符号模块。
+
 当前项目重点解决的是：
 
 - 用户上传一份结构化表格数据
@@ -33,6 +35,7 @@
 - 历史问答：围绕历史运行结果做单次追问或跨运行对比
 - Gradio 工作台、历史回放与工件下载
 - eval harness：固定 10 个自造表格任务，当前 `seed_v5` 稳定基线为 `10/10 accepted`
+- symbolic ablation：支持 `full`、`prompt_only`、`none` 三组 profile，对比符号化规则和验证反馈对流程合规性、报告完整性和可复现性的影响
 
 ### 适用场景
 

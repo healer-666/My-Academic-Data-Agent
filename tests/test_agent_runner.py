@@ -285,6 +285,44 @@ class AgentRunnerTests(unittest.TestCase):
         self.assertNotIn("<PDF_Small_Table_Mode>", prompt)
         self.assertNotIn("<PDF_Candidate_Tables_Context>", prompt)
 
+    def test_build_system_prompt_symbolic_profiles_are_distinct(self):
+        full_prompt = build_system_prompt(
+            run_dir="outputs/run_demo",
+            cleaned_data_path="outputs/run_demo/data/cleaned_data.csv",
+            figures_dir="outputs/run_demo/figures",
+            logs_dir="outputs/run_demo/logs",
+            max_steps=4,
+            tool_descriptions="- PythonInterpreterTool: Execute Python code.",
+            symbolic_profile="full",
+        )
+        prompt_only_prompt = build_system_prompt(
+            run_dir="outputs/run_demo",
+            cleaned_data_path="outputs/run_demo/data/cleaned_data.csv",
+            figures_dir="outputs/run_demo/figures",
+            logs_dir="outputs/run_demo/logs",
+            max_steps=4,
+            tool_descriptions="- PythonInterpreterTool: Execute Python code.",
+            symbolic_profile="prompt_only",
+        )
+        none_prompt = build_system_prompt(
+            run_dir="outputs/run_demo",
+            cleaned_data_path="outputs/run_demo/data/cleaned_data.csv",
+            figures_dir="outputs/run_demo/figures",
+            logs_dir="outputs/run_demo/logs",
+            max_steps=4,
+            tool_descriptions="- PythonInterpreterTool: Execute Python code.",
+            symbolic_profile="none",
+        )
+
+        self.assertIn("symbolic_profile = full", full_prompt)
+        self.assertIn("symbolic_profile = prompt_only", prompt_only_prompt)
+        self.assertIn("soft symbolic prompt constraints only", prompt_only_prompt)
+        self.assertIn("symbolic_profile = none", none_prompt)
+        self.assertIn("Response contract", none_prompt)
+        self.assertNotIn("Report_Contract_Checklist", none_prompt)
+        self.assertNotIn("Core Workflow Mandatory Policy", none_prompt)
+        self.assertNotIn("strictly separate correlation from causation", none_prompt)
+
     def test_run_analysis_records_tabular_ingestion_stub(self):
         tmp_path = self._workspace_case_dir()
         data_path = tmp_path / "sample.csv"
@@ -703,6 +741,80 @@ class AgentRunnerTests(unittest.TestCase):
         self.assertFalse(result.report_contract_passed)
         self.assertEqual(result.review_status, "max_reviews_reached")
         self.assertIn("Pre-review report contract check failed", result.review_critique)
+
+    def test_prompt_only_runs_contract_posthoc_without_revision(self):
+        tmp_path = self._workspace_case_dir()
+        data_path = tmp_path / "sample.csv"
+        data_path.write_text("group,score,timepoint\ncontrol,1,day7\nintervention,2,day7\n", encoding="utf-8")
+        fixed_run_dir = tmp_path / "outputs" / "run_prompt_only_contract_failure"
+        (fixed_run_dir / "data").mkdir(parents=True, exist_ok=True)
+        (fixed_run_dir / "figures").mkdir(parents=True, exist_ok=True)
+        (fixed_run_dir / "logs").mkdir(parents=True, exist_ok=True)
+        fixed_cleaned_path = fixed_run_dir / "data" / "cleaned_data.csv"
+        llm = StubLLM(
+            [
+                json.dumps(
+                    {
+                        "decision": "Stage 1 save cleaned data",
+                        "action": "call_tool",
+                        "tool_name": "PythonInterpreterTool",
+                        "tool_input": f'import pandas as pd\ndf = pd.read_csv(r"{data_path.as_posix()}")\ndf.to_csv(r"{fixed_cleaned_path.as_posix()}", index=False)\nprint("saved")',
+                        "final_answer": "",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "decision": "Stage 2 reload cleaned data",
+                        "action": "call_tool",
+                        "tool_name": "PythonInterpreterTool",
+                        "tool_input": f'import pandas as pd\ndf = pd.read_csv(r"{fixed_cleaned_path.as_posix()}")\nprint(df.shape)',
+                        "final_answer": "",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "decision": "Done",
+                        "action": "finish",
+                        "tool_name": "",
+                        "tool_input": "",
+                        "final_answer": _finish_report(
+                            "# Data Overview\nBrief.\n\n# Data Cleaning Notes\nSaved cleaned data.\n\n# Methods\nIndependent two-group comparison, not paired.\n\n# Core Statistical Results\nMann-Whitney U = 0.0, p = 0.01.\n\n# Conclusion\nDone.",
+                            domain="biomedicine",
+                            cleaned=True,
+                            cleaned_data_path=fixed_cleaned_path.as_posix(),
+                        ),
+                    }
+                ),
+            ]
+        )
+
+        with patch("data_analysis_agent.agent_runner.load_runtime_config", return_value=self._runtime_config(embedding=True)), patch(
+            "data_analysis_agent.agent_runner.build_llm", return_value=llm
+        ), patch(
+            "data_analysis_agent.agent_runner.build_tool_registry", return_value=StubRegistry(cleaned_data_path=fixed_cleaned_path)
+        ), patch(
+            "data_analysis_agent.agent_runner._create_run_directory",
+            return_value=(
+                fixed_run_dir,
+                fixed_run_dir / "data",
+                fixed_run_dir / "figures",
+                fixed_run_dir / "logs",
+            ),
+        ):
+            result = run_analysis(
+                data_path,
+                output_dir=tmp_path / "outputs",
+                quality_mode="standard",
+                task_type="two_group_small_sample",
+                symbolic_profile="prompt_only",
+            )
+
+        self.assertEqual(len(llm.calls), 3)
+        self.assertEqual(result.symbolic_profile, "prompt_only")
+        self.assertEqual(result.review_status, "skipped_symbolic_ablation")
+        self.assertTrue(result.execution_audit_passed)
+        self.assertFalse(result.report_contract_passed)
+        self.assertIn("posthoc only", result.review_critique)
 
 
 if __name__ == "__main__":

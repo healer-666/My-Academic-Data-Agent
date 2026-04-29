@@ -17,7 +17,9 @@ if str(SRC_PATH) not in sys.path:
 from data_analysis_agent.data_context import DataContextSummary
 from data_analysis_agent.harness import (
     aggregate_baseline_snapshot,
+    build_symbolic_ablation_report,
     build_eval_run_summary,
+    determine_evidence_level,
     build_run_summary_payload,
     classify_failure_types,
     compare_baselines,
@@ -29,6 +31,7 @@ from data_analysis_agent.harness import (
 )
 from data_analysis_agent.reporting import ReportTelemetry
 from data_analysis_agent.runtime_models import AnalysisRunResult
+from data_analysis_agent.symbolic_rules import get_symbolic_rules
 
 
 class HarnessTests(unittest.TestCase):
@@ -166,6 +169,16 @@ class HarnessTests(unittest.TestCase):
         self.assertEqual(payload["figure_count"], 1)
         self.assertTrue(summary.report_contract_passed)
         self.assertEqual(payload["report_contract_issue_types"], [])
+        self.assertEqual(summary.symbolic_profile, "full")
+        self.assertEqual(summary.statistical_validity, "not_reviewed")
+
+    def test_symbolic_rule_catalog_has_unique_ids(self):
+        rules = get_symbolic_rules()
+        rule_ids = [rule.rule_id for rule in rules]
+
+        self.assertEqual(len(rule_ids), len(set(rule_ids)))
+        self.assertIn("stage.reload_cleaned_data", rule_ids)
+        self.assertIn("report.non_causal_language", rule_ids)
 
     def test_baseline_aggregate_save_load_and_compare(self):
         run_dir = self._workspace_case_dir() / "outputs" / "run_demo"
@@ -227,6 +240,53 @@ class HarnessTests(unittest.TestCase):
         self.assertIn("report_structure_failure", failure_types)
         self.assertIn("figure_interpretation_failure", failure_types)
         self.assertIn("review_rejection", failure_types)
+
+    def test_symbolic_ablation_report_evidence_levels(self):
+        records = [
+            {
+                "task_id": "task_a",
+                "seed": "s1",
+                "profile": "full",
+                "workflow_complete": True,
+                "execution_audit_passed": True,
+                "report_contract_passed": True,
+                "statistical_validity": "not_reviewed",
+                "causal_language_violation": False,
+                "step_count": 3,
+                "duration_seconds": 1.0,
+            },
+            {
+                "task_id": "task_a",
+                "seed": "s1",
+                "profile": "prompt_only",
+                "workflow_complete": False,
+                "execution_audit_passed": False,
+                "report_contract_passed": True,
+                "statistical_validity": "not_reviewed",
+                "causal_language_violation": False,
+                "step_count": 2,
+                "duration_seconds": 0.8,
+            },
+            {
+                "task_id": "task_a",
+                "seed": "s1",
+                "profile": "none",
+                "workflow_complete": False,
+                "execution_audit_passed": False,
+                "report_contract_passed": False,
+                "statistical_validity": "not_reviewed",
+                "causal_language_violation": True,
+                "step_count": 1,
+                "duration_seconds": 0.5,
+            },
+        ]
+
+        report = build_symbolic_ablation_report(records=records, generated_at="demo")
+
+        self.assertEqual(report["evidence_level"], "strong")
+        self.assertEqual(report["profile_metrics"]["full"]["statistical_validity_rate"], "not_reviewed")
+        self.assertEqual(report["paired_comparisons"]["full_vs_none"]["pair_count"], 1)
+        self.assertEqual(determine_evidence_level({"full": {}, "prompt_only": {}, "none": {}}), "weak")
 
 
 if __name__ == "__main__":

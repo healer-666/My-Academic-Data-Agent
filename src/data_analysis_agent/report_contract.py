@@ -6,6 +6,7 @@ import re
 
 from .reporting import EvidenceCoverage, ReportTelemetry, _iter_markdown_sections
 from .runtime_models import ReportContractCheckResult, RevisionBrief
+from .symbolic_rules import get_symbolic_rule, rule_ids_for_issue_type
 
 
 _REPORT_SECTION_HINTS: dict[str, tuple[str, ...]] = {
@@ -359,6 +360,14 @@ def check_report_contract(
         blocking_issues.append("Figures were generated in telemetry but the report does not cite them explicitly.")
         issue_types.append("figure_interpretation_failure")
 
+    issue_types_tuple = tuple(dict.fromkeys(issue_types))
+    rule_ids = tuple(
+        dict.fromkeys(
+            rule_id
+            for issue_type in issue_types_tuple
+            for rule_id in rule_ids_for_issue_type(issue_type)
+        )
+    )
     return ReportContractCheckResult(
         passed=not blocking_issues,
         blocking_issues=tuple(dict.fromkeys(blocking_issues)),
@@ -368,7 +377,8 @@ def check_report_contract(
         task_alignment_flags=task_alignment_flags,
         statistics_flags=statistics_flags,
         evidence_flags=evidence_flags,
-        issue_types=tuple(dict.fromkeys(issue_types)),
+        issue_types=issue_types_tuple,
+        rule_ids=rule_ids,
     )
 
 
@@ -390,6 +400,7 @@ def format_report_contract_summary(
         [
             f"- report_contract_passed: {contract_result.passed}",
             f"- report_contract_issue_types: {', '.join(contract_result.issue_types) if contract_result.issue_types else 'none'}",
+            f"- report_contract_rule_ids: {', '.join(contract_result.rule_ids) if contract_result.rule_ids else 'none'}",
             "- report_structure_presence:",
             f"  - data_overview: {contract_result.section_presence.get('data_overview', False)}",
             f"  - cleaning_notes: {contract_result.section_presence.get('cleaning_notes', False)}",
@@ -453,6 +464,21 @@ def build_revision_brief(
             "For the Kruskal-Wallis cohort/group comparison, add a direct sentence such as: "
             "'The null hypothesis is that the compared cohort/group distributions do not differ systematically.'"
         )
+    for rule_id in ("stage.save_cleaned_data", "stage.reload_cleaned_data"):
+        rule = get_symbolic_rule(rule_id)
+        if rule and rule.failure_message.lower() in issue_text:
+            suggested_actions.append(rule.repair_hint)
+    for rule_id in (
+        "report.required_sections",
+        "report.figure_interpretation",
+        "report.statistical_reporting",
+        "report.non_causal_language",
+        "evidence.valid_citations",
+        "task.data_structure_alignment",
+    ):
+        rule = get_symbolic_rule(rule_id)
+        if rule and (rule.failure_message.lower() in issue_text or rule.category in issue_text):
+            suggested_actions.append(rule.repair_hint)
     if not suggested_actions:
         suggested_actions.append("Resolve every blocking issue before finishing the next round.")
     return RevisionBrief(

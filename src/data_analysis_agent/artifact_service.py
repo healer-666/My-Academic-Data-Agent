@@ -23,6 +23,7 @@ from .runtime_models import (
     VisualReviewRecord,
     WorkflowState,
 )
+from .symbolic_rules import SymbolicRule
 
 
 def create_run_directory(output_dir: str | Path) -> tuple[Path, Path, Path, Path]:
@@ -141,6 +142,7 @@ def reindex_step_traces(step_traces: list[AgentStepTrace], start_index: int) -> 
             action=trace.action,
             decision=trace.decision,
             tool_name=trace.tool_name,
+            tool_input=trace.tool_input,
             tool_status=trace.tool_status,
             observation=trace.observation,
             observation_preview=trace.observation_preview,
@@ -185,6 +187,8 @@ def save_agent_trace(
     failure_memory_payload: dict[str, object] | None = None,
     execution_audit: StageExecutionAuditResult | None = None,
     report_contract_check: ReportContractCheckResult | None = None,
+    symbolic_profile: str = "full",
+    symbolic_rules: tuple[SymbolicRule, ...] = (),
 ) -> Path:
     active_rag_payload = dict(rag_payload or {})
     active_memory_payload = dict(memory_payload or {})
@@ -203,6 +207,7 @@ def save_agent_trace(
             "run_id": run_context.run_id,
             "session_id": run_context.session_id,
             "quality_mode": run_context.quality_mode,
+            "symbolic_profile": symbolic_profile,
             "latency_mode": run_context.latency_mode,
             "vision_review_mode": run_context.vision_review_mode,
             "document_ingestion_mode": run_context.document_ingestion_mode,
@@ -283,6 +288,11 @@ def save_agent_trace(
         },
         "execution_audit": active_execution_audit.to_trace_dict(),
         "report_contract_check": active_report_contract.to_trace_dict(),
+        "symbolic_governance": {
+            "profile": symbolic_profile,
+            "rules": [rule.to_dict() for rule in symbolic_rules],
+            "hard_verification_enabled": symbolic_profile == "full",
+        },
         "search_status": search_status,
         "review_status": review_status,
         "timing_breakdown": dict(timing_breakdown),

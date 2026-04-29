@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .symbolic_rules import format_symbolic_rule_catalog_for_prompt, resolve_symbolic_profile
+
 
 DEFAULT_QUERY = "请分析以下数据集："
 
@@ -19,10 +21,23 @@ def build_system_prompt(
     latency_mode: str = "quality",
     fast_path_enabled: bool = False,
     pdf_small_table_mode: bool = False,
+    symbolic_profile: str = "full",
 ) -> str:
     """Return the system prompt for the custom JSON-driven analysis runner."""
 
     tools_block = tool_descriptions or "- PythonInterpreterTool: Execute Python code and print analysis results."
+    resolved_symbolic_profile = resolve_symbolic_profile(symbolic_profile)
+    if resolved_symbolic_profile == "none":
+        return _build_minimal_system_prompt(
+            run_dir=run_dir,
+            cleaned_data_path=cleaned_data_path,
+            figures_dir=figures_dir,
+            logs_dir=logs_dir,
+            max_steps=max_steps,
+            tools_block=tools_block,
+            search_enabled=search_enabled,
+            latency_mode=latency_mode,
+        )
 
     search_policy_block = (
         "Online domain search is available in this run. Use TavilySearchTool only when the available tools list includes it and the domain context genuinely requires external background knowledge."
@@ -64,6 +79,13 @@ Your job is to analyze the dataset described in the user-provided data_context. 
 
 Available tools:
 {tools_block}
+
+Symbolic governance profile:
+- symbolic_profile = {resolved_symbolic_profile}
+- full means soft symbolic prompt constraints plus hard symbolic verification and self-revision.
+- prompt_only means soft symbolic prompt constraints only; hard verifiers may evaluate the run later but must not be treated as prompt-time evidence.
+
+{format_symbolic_rule_catalog_for_prompt()}
 
 Core Workflow Mandatory Policy / 核心工作流强制规范:
 You must follow the two-stage pipeline below. You are not allowed to skip Stage 1 and directly analyze the raw file.
@@ -239,6 +261,69 @@ Validation rules:
   - When retrieved knowledge is used, the relevant explanation sentences must include inline short citations such as [来源: glossary.md, p.3]
   - If any hypothesis test was run, the report must include the test statistic, p-value, effect size, and 95% CI together.
   - If more than two groups were compared pairwise, the report must state the multiple-comparison correction method explicitly.
+"""
+
+
+def _build_minimal_system_prompt(
+    *,
+    run_dir: str,
+    cleaned_data_path: str,
+    figures_dir: str,
+    logs_dir: str,
+    max_steps: int,
+    tools_block: str,
+    search_enabled: bool,
+    latency_mode: str,
+) -> str:
+    search_policy_block = (
+        "Online domain search is available only if TavilySearchTool appears in the available tools list."
+        if search_enabled
+        else "Online domain search is disabled for this run."
+    )
+    return f"""You are a data analysis agent. Analyze the user-provided tabular dataset by using the available tools when computation or file inspection is needed.
+
+This run uses symbolic_profile = none. Keep the basic tool protocol and output format, but do not assume any additional statistical guardrail checklist, staged cleaning contract, citation contract, or causal-language policy beyond the user's task.
+
+Available tools:
+{tools_block}
+
+Execution rules:
+1. Use PythonInterpreterTool when you need to inspect local files, calculate statistics, or generate plots.
+2. Save useful generated artifacts inside this run directory when possible.
+3. Print any results or file paths you need to observe from tool output.
+4. {search_policy_block}
+5. Latency mode for this run: {latency_mode}.
+6. You have at most {max_steps} controller steps.
+
+Run directory:
+- Run root directory: `{run_dir}`
+- Suggested cleaned data path, if you choose to save cleaned data: `{cleaned_data_path}`
+- Figures directory: `{figures_dir}`
+- Logs directory: `{logs_dir}`
+
+Response contract:
+- Every single response must be exactly one JSON object.
+- Do not wrap the JSON in Markdown.
+- Do not add commentary before or after the JSON object.
+
+Use this schema:
+{{
+  "decision": "One short sentence describing the next concrete step.",
+  "action": "call_tool" or "finish",
+  "tool_name": "PythonInterpreterTool or TavilySearchTool",
+  "tool_input": "Complete Python code or a natural-language search query as a string. Required only when action is call_tool.",
+  "final_answer": "Complete Markdown report followed by a trailing <telemetry>{{...}}</telemetry> block. Required only when action is finish."
+}}
+
+Validation rules:
+- If action is "call_tool", provide a non-empty tool_name and tool_input, and leave final_answer as an empty string.
+- Only call a tool if it is explicitly listed in the Available tools block above.
+- If action is "finish", provide the complete final Markdown report in final_answer, and leave tool_name and tool_input as empty strings.
+- The final answer must end with exactly one telemetry block in this form:
+<telemetry>
+{{"methods": [...], "domain": "...", "tools_used": [...], "search_used": true_or_false, "search_notes": "...", "cleaned_data_saved": true_or_false, "cleaned_data_path": "...", "figures_generated": ["..."]}}
+</telemetry>
+- The telemetry block must reflect actual tool usage and real analysis steps. Do not fabricate methods, domain, search usage, or artifact paths.
 """
 
 

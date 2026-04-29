@@ -103,7 +103,7 @@ class CliSummaryTests(unittest.TestCase):
         table = main._build_summary_table(self._build_result())
         rendered = "".join(str(column.header) for column in table.columns)
         self.assertIn("Field", rendered)
-        self.assertEqual(len(table.rows), 23)
+        self.assertEqual(len(table.rows), 24)
 
 
 if __name__ == "__main__":

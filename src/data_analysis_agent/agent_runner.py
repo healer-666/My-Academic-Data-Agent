@@ -82,6 +82,7 @@ from .runtime_models import (
     VisualReviewRecord,
     WorkflowState,
 )
+from .symbolic_rules import get_symbolic_rules, resolve_symbolic_profile
 from .tooling_service import (
     build_tool_registry as _build_tool_registry_service,
     collect_tools_used as _collect_tools_used_service,
@@ -903,6 +904,7 @@ def _save_agent_trace(
     failure_memory_payload: dict[str, Any] | None = None,
     execution_audit: StageExecutionAuditResult | None = None,
     report_contract_check: ReportContractCheckResult | None = None,
+    symbolic_profile: str = "full",
 ) -> Path:
     active_run_context = run_context or RunContext(
         run_id=run_dir.name,
@@ -952,6 +954,8 @@ def _save_agent_trace(
         failure_memory_payload=failure_memory_payload,
         execution_audit=execution_audit,
         report_contract_check=report_contract_check,
+        symbolic_profile=symbolic_profile,
+        symbolic_rules=get_symbolic_rules(),
     )
 
 
@@ -1177,6 +1181,7 @@ def run_analysis(
     memory_scope_key: str | None = None,
     task_type: str = "",
     task_expectations: Iterable[str] = (),
+    symbolic_profile: str = "full",
 ) -> AnalysisRunResult:
     """Run the full data analysis workflow."""
 
@@ -1197,7 +1202,8 @@ def run_analysis(
     resolved_quality_mode = _resolve_quality_mode(quality_mode)
     resolved_latency_mode = _resolve_latency_mode(latency_mode)
     resolved_vision_review_mode = _resolve_vision_review_mode(vision_review_mode)
-    review_enabled = resolved_quality_mode != "draft"
+    resolved_symbolic_profile = resolve_symbolic_profile(symbolic_profile)
+    review_enabled = resolved_quality_mode != "draft" and resolved_symbolic_profile == "full"
     effective_max_reviews = (
         _default_max_reviews_for_mode(resolved_quality_mode) if max_reviews is None else max(0, max_reviews)
     )
@@ -1779,6 +1785,7 @@ def run_analysis(
             search_enabled=search_enabled,
             latency_mode=resolved_latency_mode,
             fast_path_enabled=fast_path_enabled,
+            symbolic_profile=resolved_symbolic_profile,
         )
         current_runner = ScientificReActRunner(
             name=agent_name,
@@ -1943,6 +1950,7 @@ def run_analysis(
             failure_memory_payload=failure_memory_payload,
             execution_audit=current_execution_audit,
             report_contract_check=current_report_contract,
+            symbolic_profile=resolved_symbolic_profile,
         )
         _accumulate_duration(timing_breakdown, "trace_persist_duration_ms", _elapsed_ms(trace_persist_started_at))
 
@@ -1955,17 +1963,23 @@ def run_analysis(
         )
 
         if not review_enabled:
-            review_status = "skipped"
+            review_status = "skipped_symbolic_ablation" if resolved_symbolic_profile != "full" else "skipped"
             review_rounds_used = 0
-            review_critique = (
-                "Review skipped in draft mode."
-                if current_execution_audit.passed and current_report_contract.passed
-                else (
-                    "Draft mode skipped reviewer, but stage execution audit did not pass."
-                    if not current_execution_audit.passed
-                    else "Draft mode skipped reviewer, but the report contract did not pass."
+            if resolved_symbolic_profile != "full":
+                review_critique = (
+                    f"Symbolic profile {resolved_symbolic_profile} runs verifiers posthoc only; "
+                    "blocking rejection and revision loop were intentionally disabled."
                 )
-            )
+            else:
+                review_critique = (
+                    "Review skipped in draft mode."
+                    if current_execution_audit.passed and current_report_contract.passed
+                    else (
+                        "Draft mode skipped reviewer, but stage execution audit did not pass."
+                        if not current_execution_audit.passed
+                        else "Draft mode skipped reviewer, but the report contract did not pass."
+                    )
+                )
             break
 
         if not current_execution_audit.passed:
@@ -2307,7 +2321,13 @@ def run_analysis(
         )
     )
 
-    if review_status == "accepted" and artifact_validation.workflow_complete and use_memory and runtime_config.embedding_configured:
+    if (
+        resolved_symbolic_profile == "full"
+        and review_status == "accepted"
+        and artifact_validation.workflow_complete
+        and use_memory
+        and runtime_config.embedding_configured
+    ):
         try:
             _emit_event(
                 event_recorder.emit,
@@ -2344,6 +2364,7 @@ def run_analysis(
                 review_rounds_used=review_rounds_used,
                 review_critique=review_critique,
                 review_log_paths=tuple(review.review_log_path for review in review_history),
+                symbolic_profile=resolved_symbolic_profile,
                 input_kind=document_ingestion.input_kind,
                 document_ingestion_status=document_ingestion.status,
                 document_ingestion_summary=document_ingestion.summary,
@@ -2456,7 +2477,7 @@ def run_analysis(
             reason="Project memory writeback not triggered for this run.",
         )
 
-    if complete_failure and use_memory and runtime_config.embedding_configured:
+    if complete_failure and resolved_symbolic_profile == "full" and use_memory and runtime_config.embedding_configured:
         try:
             _emit_event(
                 event_recorder.emit,
@@ -2493,6 +2514,7 @@ def run_analysis(
                 review_rounds_used=review_rounds_used,
                 review_critique=review_critique,
                 review_log_paths=tuple(review.review_log_path for review in review_history),
+                symbolic_profile=resolved_symbolic_profile,
                 input_kind=document_ingestion.input_kind,
                 document_ingestion_status=document_ingestion.status,
                 document_ingestion_summary=document_ingestion.summary,
@@ -2593,6 +2615,8 @@ def run_analysis(
     else:
         if not use_memory:
             failure_memory_writeback_status = "disabled"
+        elif complete_failure and resolved_symbolic_profile != "full":
+            failure_memory_writeback_status = "symbolic_ablation_skipped"
         elif not complete_failure:
             failure_memory_writeback_status = "not_applicable"
         elif not runtime_config.embedding_configured:
@@ -2641,6 +2665,7 @@ def run_analysis(
         failure_memory_payload=failure_memory_payload,
         execution_audit=current_execution_audit,
         report_contract_check=current_report_contract,
+        symbolic_profile=resolved_symbolic_profile,
     )
     _accumulate_duration(
         timing_breakdown,
@@ -2697,6 +2722,7 @@ def run_analysis(
         review_rounds_used=review_rounds_used,
         review_critique=review_critique,
         review_log_paths=tuple(review.review_log_path for review in review_history),
+        symbolic_profile=resolved_symbolic_profile,
         input_kind=document_ingestion.input_kind,
         document_ingestion_status=document_ingestion.status,
         document_ingestion_summary=document_ingestion.summary,

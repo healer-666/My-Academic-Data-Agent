@@ -91,12 +91,14 @@ class StageExecutionFinding:
     finding_type: str
     message: str
     step_index: int | None = None
+    rule_id: str = ""
 
     def to_trace_dict(self) -> dict[str, object]:
         return {
             "type": self.finding_type,
             "message": self.message,
             "step_index": self.step_index,
+            "rule_id": self.rule_id,
         }
 
 
@@ -136,6 +138,7 @@ class ReportContractCheckResult:
     statistics_flags: dict[str, bool] = field(default_factory=dict)
     evidence_flags: dict[str, bool] = field(default_factory=dict)
     issue_types: tuple[str, ...] = ()
+    rule_ids: tuple[str, ...] = ()
 
     def to_trace_dict(self) -> dict[str, object]:
         return {
@@ -148,6 +151,7 @@ class ReportContractCheckResult:
             "statistics_flags": dict(self.statistics_flags),
             "evidence_flags": dict(self.evidence_flags),
             "issue_types": list(self.issue_types),
+            "rule_ids": list(self.rule_ids),
         }
 
 
@@ -277,6 +281,7 @@ class AnalysisRunResult:
     review_rounds_used: int
     review_critique: str
     review_log_paths: tuple[Path, ...]
+    symbolic_profile: str = "full"
     input_kind: str = "tabular"
     document_ingestion_status: str = "not_needed"
     document_ingestion_summary: str = ""

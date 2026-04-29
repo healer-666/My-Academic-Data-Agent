@@ -65,6 +65,9 @@ class EvalRunSummary:
     step_count: int
     duration_seconds: float
     warnings: tuple[str, ...] = ()
+    symbolic_profile: str = "full"
+    statistical_validity: str = "not_reviewed"
+    causal_language_violation: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

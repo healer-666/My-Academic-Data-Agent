@@ -91,6 +91,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Latency policy: auto enables adaptive fast-paths, quality preserves the full workflow, fast prioritizes speed.",
     )
     parser.add_argument(
+        "--symbolic-profile",
+        choices=("full", "prompt_only", "none"),
+        default="full",
+        help="Symbolic governance profile: full, prompt_only, or none.",
+    )
+    parser.add_argument(
         "--vision-review-mode",
         choices=("off", "auto", "on"),
         default="auto",
@@ -144,6 +150,7 @@ def _format_review_status(result: AnalysisRunResult) -> str:
         "accepted": "Reviewer accepted",
         "rejected": "Reviewer rejected",
         "max_reviews_reached": "Reviewer max rounds reached",
+        "skipped_symbolic_ablation": "Reviewer skipped for symbolic ablation",
     }
     label = mapping.get(result.review_status, result.review_status or "unknown")
     return f"{label} | rounds={result.review_rounds_used}"
@@ -175,6 +182,7 @@ def _build_summary_table(result: AnalysisRunResult) -> Table:
     table.add_row("Methods", ", ".join(result.methods_used) if result.methods_used else "unknown")
     table.add_row("Search", _format_search_status(result.search_status, result.search_notes))
     table.add_row("Quality mode", result.quality_mode)
+    table.add_row("Symbolic profile", result.symbolic_profile)
     table.add_row("Latency mode", result.latency_mode)
     table.add_row("Input kind", result.input_kind)
     table.add_row("Vision review", _format_vision_status(result))
@@ -379,6 +387,7 @@ def main() -> int:
                 max_reviews=args.max_reviews,
                 quality_mode=args.quality_mode,
                 latency_mode=args.latency_mode,
+                symbolic_profile=args.symbolic_profile,
                 vision_review_mode=args.vision_review_mode,
                 vision_max_images=args.vision_max_images,
                 vision_max_image_side=args.vision_max_image_side,

@@ -145,6 +145,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-root", default="outputs", help="Run artifact root passed to run_analysis.")
     parser.add_argument("--reports-dir", default="eval/reports", help="Directory for harness run outputs.")
     parser.add_argument("--env-file", default=None, help="Optional .env file path.")
+    parser.add_argument(
+        "--symbolic-profile",
+        choices=("full", "prompt_only", "none"),
+        default="full",
+        help="Symbolic governance profile passed to run_analysis.",
+    )
     return parser
 
 
@@ -179,6 +185,7 @@ def main() -> int:
                 memory_scope_key=task.memory_scope_key,
                 task_type=task.task_type,
                 task_expectations=task.manual_expectations,
+                symbolic_profile=args.symbolic_profile,
             )
         except KeyboardInterrupt:
             _write_aggregate_report(report_dir, summaries)

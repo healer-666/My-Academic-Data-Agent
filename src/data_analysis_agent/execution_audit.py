@@ -6,6 +6,7 @@ import ast
 from pathlib import Path
 
 from .runtime_models import AgentStepTrace, StageExecutionAuditResult, StageExecutionFinding
+from .symbolic_rules import rule_id_for_stage_finding
 
 _SUPPORTED_READ_FUNCS = {"read_csv", "read_excel"}
 _SUPPORTED_WRITE_METHODS = {"to_csv", "to_excel"}
@@ -31,6 +32,7 @@ def audit_stage_execution(
                 StageExecutionFinding(
                     finding_type="missing_python_steps",
                     message="No successful Python analysis steps were available for stage-contract audit.",
+                    rule_id="execution_audit_failure",
                 ),
             ),
         )
@@ -76,6 +78,7 @@ def audit_stage_execution(
                 StageExecutionFinding(
                     finding_type="ambiguous_stage1_save",
                     message="Stage 1 appears to save cleaned data via an unsupported dynamic path pattern, so compliance cannot be proven.",
+                    rule_id=rule_id_for_stage_finding("ambiguous_stage1_save"),
                 )
             )
             return _finalize_audit(
@@ -90,6 +93,7 @@ def audit_stage_execution(
             StageExecutionFinding(
                 finding_type="missing_stage1_save",
                 message="No Python step explicitly saved the canonical cleaned_data.csv path.",
+                rule_id=rule_id_for_stage_finding("missing_stage1_save"),
             )
         )
         return _finalize_audit(
@@ -107,6 +111,7 @@ def audit_stage_execution(
                 finding_type="missing_cleaned_file",
                 message="A Stage 1 save step was detected, but the canonical cleaned_data.csv file does not exist.",
                 step_index=stage1_step,
+                rule_id=rule_id_for_stage_finding("missing_cleaned_file"),
             )
         )
         return _finalize_audit(
@@ -124,6 +129,7 @@ def audit_stage_execution(
                 finding_type="raw_data_reused_after_stage1",
                 message="A later Python step re-read the raw source dataset after Stage 1 completed.",
                 step_index=raw_reuse_step,
+                rule_id=rule_id_for_stage_finding("raw_data_reused_after_stage1"),
             )
         )
         return _finalize_audit(
@@ -146,6 +152,7 @@ def audit_stage_execution(
                     else "Later Python steps used unsupported file-access patterns, so a compliant Stage 2 reload cannot be proven."
                 ),
                 step_index=stage1_step,
+                rule_id=rule_id_for_stage_finding("missing_stage2_reload" if status == "failed" else "ambiguous_stage2_reload"),
             )
         )
         return _finalize_audit(
@@ -162,6 +169,7 @@ def audit_stage_execution(
             StageExecutionFinding(
                 finding_type="ambiguous_post_stage1_access",
                 message="At least one post-Stage-1 Python step used unsupported file-access patterns, so compliance cannot be proven conservatively.",
+                rule_id="execution_audit_failure",
             )
         )
         return _finalize_audit(
@@ -178,6 +186,7 @@ def audit_stage_execution(
             finding_type="stage_contract_passed",
             message="Detected canonical cleaned_data.csv save in Stage 1 and explicit reload in a later Python step.",
             step_index=stage2_step,
+            rule_id="",
         )
     )
     return _finalize_audit(
@@ -244,6 +253,7 @@ def _inspect_python_step(
                 finding_type="unparseable_python",
                 message=f"Python code could not be parsed for execution audit: {exc.msg}",
                 step_index=step_index,
+                rule_id="execution_audit_failure",
             )
         ]
 
@@ -307,6 +317,7 @@ class _PathAuditVisitor(ast.NodeVisitor):
                             f"{operation['label']}, so stage-contract compliance cannot be proven."
                         ),
                         step_index=self.step_index,
+                        rule_id="execution_audit_failure",
                     )
                 )
             self.operations.append({"operation": operation["operation"], "kind": kind})
