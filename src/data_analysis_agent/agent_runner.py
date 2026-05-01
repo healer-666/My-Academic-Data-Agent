@@ -2034,19 +2034,6 @@ def run_analysis(
             )
             continue
 
-            analyst_messages.append(
-                {
-                    "role": "user",
-                    "content": (
-                        f"[阶段执行审计未通过]：{reviewer_reply.critique}\n"
-                        "你必须先修复执行流程本身：先把原始数据清洗并保存到规范 cleaned_data.csv，"
-                        "再在后续新的 Python 步骤中明确重读该文件完成正式分析。"
-                        f"下一轮所有新图表必须保存到：{(figures_dir / f'review_round_{review_round + 1}').as_posix()}。"
-                    ),
-                }
-            )
-            continue
-
         if not current_report_contract.passed:
             contract_reply = ParsedReviewerReply(
                 decision="Reject",
@@ -2288,18 +2275,6 @@ def run_analysis(
             }
         )
         continue
-
-        analyst_messages.append(
-            {
-                "role": "user",
-                "content": (
-                    f"[审稿人拒稿意见]：{reviewer_reply.critique}\n"
-                    "你必须逐条回应并修复以下全部问题，重新分析并重写报告。"
-                    f"下一轮所有新图表必须保存到：{(figures_dir / f'review_round_{review_round + 1}').as_posix()}。"
-                    "不要重复原报告中的问题，也不要忽略任何已经指出的主要缺陷。"
-                ),
-            }
-        )
 
     if report_path is not None:
         save_markdown_report(report_markdown, Path(report_path))
