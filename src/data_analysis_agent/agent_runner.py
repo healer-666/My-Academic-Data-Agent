@@ -1185,6 +1185,7 @@ def run_analysis(
 ) -> AnalysisRunResult:
     """Run the full data analysis workflow."""
 
+    # Stage 1: resolve runtime configuration, profile switches, and run paths.
     if event_handler is None and verbose:
         event_handler = build_plaintext_event_handler()
 
@@ -1281,6 +1282,7 @@ def run_analysis(
     )
     _emit_event(event_recorder.emit, "document_ingestion_skipped")
 
+    # Stage 2: summarize the input table and derive runtime knobs from its shape.
     workflow_tracker.transition(WorkflowState.CONTEXT)
     _emit_event(event_recorder.emit, "data_context_loading", data_path=document_ingestion.normalized_data_path.as_posix())
     data_context_started_at = time.perf_counter()
@@ -1313,6 +1315,7 @@ def run_analysis(
         small_simple_dataset=small_simple_dataset,
     )
 
+    # Stage 3: retrieve prior success and failure memory for this project scope.
     knowledge_provider = KnowledgeContextProvider()
     active_knowledge_base_dir = Path(knowledge_base_dir or Path("memory") / "knowledge_base").resolve()
     active_memory_base_dir = (Path("memory") / "project_memory").resolve()
@@ -1519,6 +1522,8 @@ def run_analysis(
                 status="failed",
                 reason=f"Failure memory retrieval failed: {exc}",
             )
+
+    # Stage 4: index uploaded knowledge files and retrieve the evidence register.
     knowledge_bundle = knowledge_provider.collect(
         data_context=data_context,
         user_query=query,
@@ -1727,6 +1732,7 @@ def run_analysis(
                 reason=warning_text,
             )
 
+    # Stage 5: prepare tools and run the analyst ReAct loop, with optional revisions.
     tool_registry = build_tool_registry(enable_search=search_enabled)
     _emit_event(
         event_recorder.emit,
@@ -1853,6 +1859,7 @@ def run_analysis(
         rag_payload["uncited_sections_detected"] = list(rag_uncited_sections_detected)
         rag_payload["invalid_citation_labels"] = list(evidence_coverage.invalid_citation_labels)
 
+        # Stage 6: run symbolic/posthoc verification before any reviewer pass.
         round_report_path = run_dir / f"review_round_{review_round}_report.md"
         analysis_rounds.append(
             AnalystRoundRecord(
@@ -2098,6 +2105,7 @@ def run_analysis(
             )
             continue
 
+        # Stage 7: run optional visual review and LLM reviewer, then feed rejections back.
         workflow_tracker.transition(WorkflowState.REVIEW)
         visual_attempt_enabled = _should_attempt_vision_review(
             quality_mode=resolved_quality_mode,
@@ -2279,6 +2287,7 @@ def run_analysis(
     if report_path is not None:
         save_markdown_report(report_markdown, Path(report_path))
 
+    # Stage 8: write memories, persist final trace, and return the public result.
     step_traces_tuple = tuple(all_step_traces)
     tools_used = _collect_tools_used(step_traces_tuple, telemetry)
     search_status, search_notes = _determine_search_status(step_traces_tuple, telemetry)
