@@ -1,142 +1,192 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="'Segoe UI','Microsoft YaHei',Arial,sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" font-family="'Segoe UI','Microsoft YaHei',Arial,sans-serif">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0B1220"/><stop offset="1" stop-color="#111C2F"/></linearGradient>
-    <filter id="shadow" x="-8%" y="-8%" width="116%" height="116%"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#020617" flood-opacity="0.22"/></filter>
-    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/></marker>
-    <marker id="arrowBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#3B82F6"/></marker>
-    <marker id="arrowGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#10B981"/></marker>
-    <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#EF4444"/></marker>
+    <radialGradient id="halo" cx="50%" cy="40%" r="75%">
+      <stop offset="0%" stop-color="#0B3A6E" stop-opacity="0.55"/>
+      <stop offset="48%" stop-color="#061A33" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#020817"/>
+    </radialGradient>
+    <filter id="softGlow" x="-35%" y="-35%" width="170%" height="170%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="deepShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000814" flood-opacity="0.42"/>
+    </filter>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#2F86FF"/></marker>
+    <marker id="arrowGray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#A7B1C3"/></marker>
+    <marker id="arrowAmber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#FFB000"/></marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#31D17B"/></marker>
+    <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#FF4949"/></marker>
     <style>
-      .title{fill:#F8FAFC;font-size:30px;font-weight:800;letter-spacing:0}
-      .sub{fill:#A8B3C7;font-size:14px}
-      .section{fill:#F8FAFC;font-size:16px;font-weight:800}
-      .label{fill:#F8FAFC;font-size:14px;font-weight:750}
-      .small{fill:#B9C5D8;font-size:12px}
-      .tiny{fill:#9DAAC0;font-size:11px}
-      .code{fill:#C7D2FE;font-size:11px;font-family:'Cascadia Mono','Consolas',monospace}
+      .mono { font-family:'Cascadia Mono','Consolas',monospace; }
+      .muted { fill:#C7D0DF; opacity:.9; }
+      .tiny { fill:#CBD5E1; font-size:18px; }
+      .bullet { fill:#F5F7FA; font-size:20px; }
     </style>
   </defs>
-  <rect width="1280" height="720" rx="18" fill="url(#bg)"/>
-  <text class="title" x="640" y="44" text-anchor="middle">Academic Data Agent 总体架构</text>
-  <text class="sub" x="640" y="70" text-anchor="middle">面向科研表格分析的可信数据分析智能体系统</text>
-<rect x="70" y="92" width="1140" height="76" rx="14" fill="#151F33" stroke="#3B82F6" stroke-opacity="0.45" filter="url(#shadow)"/>
-<rect x="70" y="92" width="5" height="76" rx="3" fill="#3B82F6"/>
-<text class="section" x="88" y="121" fill="#3B82F6">L1 输入与数据上下文</text>
-<text class="small" x="88" y="143" >Gradio / CLI 接收请求，文档解析后形成 DataContextSummary</text>
-<rect x="430" y="128" width="155" height="30" rx="8" fill="#3B82F6" fill-opacity="0.14" stroke="#3B82F6" stroke-opacity="0.62"/>
-<text class="label" x="507.5" y="148.0" text-anchor="middle">main.py</text>
-<line x1="585" y1="143.0" x2="605" y2="143.0" stroke="#3B82F6" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="605" y="128" width="155" height="30" rx="8" fill="#3B82F6" fill-opacity="0.14" stroke="#3B82F6" stroke-opacity="0.62"/>
-<text class="label" x="682.5" y="140.0" text-anchor="middle">document_in</text>
-<text class="label" x="682.5" y="156.0" text-anchor="middle">gestion</text>
-<line x1="760" y1="143.0" x2="780" y2="143.0" stroke="#3B82F6" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="780" y="128" width="155" height="30" rx="8" fill="#3B82F6" fill-opacity="0.14" stroke="#3B82F6" stroke-opacity="0.62"/>
-<text class="label" x="857.5" y="140.0" text-anchor="middle">data_contex</text>
-<text class="label" x="857.5" y="156.0" text-anchor="middle">t</text>
-<line x1="935" y1="143.0" x2="955" y2="143.0" stroke="#3B82F6" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="955" y="128" width="155" height="30" rx="8" fill="#3B82F6" fill-opacity="0.14" stroke="#3B82F6" stroke-opacity="0.62"/>
-<text class="label" x="1032.5" y="140.0" text-anchor="middle">RuntimeConf</text>
-<text class="label" x="1032.5" y="156.0" text-anchor="middle">ig</text>
-<line x1="640" y1="168" x2="640" y2="184" stroke="#64748B" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
-<rect x="70" y="188" width="1140" height="76" rx="14" fill="#151F33" stroke="#8B5CF6" stroke-opacity="0.45" filter="url(#shadow)"/>
-<rect x="70" y="188" width="5" height="76" rx="3" fill="#8B5CF6"/>
-<text class="section" x="88" y="217" fill="#8B5CF6">L2 检索与记忆系统</text>
-<text class="small" x="88" y="239" >外部知识 RAG、成功/失败经验记忆与证据登记</text>
-<rect x="430" y="224" width="155" height="30" rx="8" fill="#8B5CF6" fill-opacity="0.14" stroke="#8B5CF6" stroke-opacity="0.62"/>
-<text class="label" x="507.5" y="244.0" text-anchor="middle">RAG Service</text>
-<line x1="585" y1="239.0" x2="605" y2="239.0" stroke="#8B5CF6" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="605" y="224" width="155" height="30" rx="8" fill="#8B5CF6" fill-opacity="0.14" stroke="#8B5CF6" stroke-opacity="0.62"/>
-<text class="label" x="682.5" y="236.0" text-anchor="middle">Success</text>
-<text class="label" x="682.5" y="252.0" text-anchor="middle">Memory</text>
-<line x1="760" y1="239.0" x2="780" y2="239.0" stroke="#8B5CF6" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="780" y="224" width="155" height="30" rx="8" fill="#8B5CF6" fill-opacity="0.14" stroke="#8B5CF6" stroke-opacity="0.62"/>
-<text class="label" x="857.5" y="236.0" text-anchor="middle">Failure</text>
-<text class="label" x="857.5" y="252.0" text-anchor="middle">Memory</text>
-<line x1="935" y1="239.0" x2="955" y2="239.0" stroke="#8B5CF6" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="955" y="224" width="155" height="30" rx="8" fill="#8B5CF6" fill-opacity="0.14" stroke="#8B5CF6" stroke-opacity="0.62"/>
-<text class="label" x="1032.5" y="236.0" text-anchor="middle">Evidence</text>
-<text class="label" x="1032.5" y="252.0" text-anchor="middle">Register</text>
-<line x1="640" y1="264" x2="640" y2="280" stroke="#64748B" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
-<rect x="70" y="284" width="1140" height="76" rx="14" fill="#151F33" stroke="#F59E0B" stroke-opacity="0.45" filter="url(#shadow)"/>
-<rect x="70" y="284" width="5" height="76" rx="3" fill="#F59E0B"/>
-<text class="section" x="88" y="313" fill="#F59E0B">L3 分析执行层</text>
-<text class="small" x="88" y="335" >LLM 生成结构化动作，工具执行并返回观察结果</text>
-<rect x="430" y="320" width="155" height="30" rx="8" fill="#F59E0B" fill-opacity="0.14" stroke="#F59E0B" stroke-opacity="0.62"/>
-<text class="label" x="507.5" y="340.0" text-anchor="middle">LLM JSON 动作</text>
-<line x1="585" y1="335.0" x2="605" y2="335.0" stroke="#F59E0B" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="605" y="320" width="155" height="30" rx="8" fill="#F59E0B" fill-opacity="0.14" stroke="#F59E0B" stroke-opacity="0.62"/>
-<text class="label" x="682.5" y="332.0" text-anchor="middle">PythonInter</text>
-<text class="label" x="682.5" y="348.0" text-anchor="middle">preterTool</text>
-<line x1="760" y1="335.0" x2="780" y2="335.0" stroke="#F59E0B" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="780" y="320" width="155" height="30" rx="8" fill="#F59E0B" fill-opacity="0.14" stroke="#F59E0B" stroke-opacity="0.62"/>
-<text class="label" x="857.5" y="332.0" text-anchor="middle">TavilySearc</text>
-<text class="label" x="857.5" y="348.0" text-anchor="middle">hTool</text>
-<line x1="935" y1="335.0" x2="955" y2="335.0" stroke="#F59E0B" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="955" y="320" width="155" height="30" rx="8" fill="#F59E0B" fill-opacity="0.14" stroke="#F59E0B" stroke-opacity="0.62"/>
-<text class="label" x="1032.5" y="340.0" text-anchor="middle">Observation</text>
-<line x1="640" y1="360" x2="640" y2="376" stroke="#64748B" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
-<rect x="70" y="380" width="1140" height="76" rx="14" fill="#151F33" stroke="#10B981" stroke-opacity="0.45" filter="url(#shadow)"/>
-<rect x="70" y="380" width="5" height="76" rx="3" fill="#10B981"/>
-<text class="section" x="88" y="409" fill="#10B981">L4 治理与审计层</text>
-<text class="small" x="88" y="431" >AST 执行审计、报告契约检查、审稿循环</text>
-<rect x="430" y="416" width="155" height="30" rx="8" fill="#10B981" fill-opacity="0.14" stroke="#10B981" stroke-opacity="0.62"/>
-<text class="label" x="507.5" y="428.0" text-anchor="middle">execution_a</text>
-<text class="label" x="507.5" y="444.0" text-anchor="middle">udit</text>
-<line x1="585" y1="431.0" x2="605" y2="431.0" stroke="#10B981" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="605" y="416" width="155" height="30" rx="8" fill="#10B981" fill-opacity="0.14" stroke="#10B981" stroke-opacity="0.62"/>
-<text class="label" x="682.5" y="428.0" text-anchor="middle">report_cont</text>
-<text class="label" x="682.5" y="444.0" text-anchor="middle">ract</text>
-<line x1="760" y1="431.0" x2="780" y2="431.0" stroke="#10B981" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="780" y="416" width="155" height="30" rx="8" fill="#10B981" fill-opacity="0.14" stroke="#10B981" stroke-opacity="0.62"/>
-<text class="label" x="857.5" y="428.0" text-anchor="middle">review_serv</text>
-<text class="label" x="857.5" y="444.0" text-anchor="middle">ice</text>
-<line x1="935" y1="431.0" x2="955" y2="431.0" stroke="#10B981" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="955" y="416" width="155" height="30" rx="8" fill="#10B981" fill-opacity="0.14" stroke="#10B981" stroke-opacity="0.62"/>
-<text class="label" x="1032.5" y="428.0" text-anchor="middle">symbolic_ru</text>
-<text class="label" x="1032.5" y="444.0" text-anchor="middle">les</text>
-<line x1="640" y1="456" x2="640" y2="472" stroke="#64748B" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
-<rect x="70" y="476" width="1140" height="76" rx="14" fill="#151F33" stroke="#EF4444" stroke-opacity="0.45" filter="url(#shadow)"/>
-<rect x="70" y="476" width="5" height="76" rx="3" fill="#EF4444"/>
-<text class="section" x="88" y="505" fill="#EF4444">L5 评测与回归检测</text>
-<text class="small" x="88" y="527" >10 个任务、baseline 对照、符号消融与失败分类</text>
-<rect x="430" y="512" width="155" height="30" rx="8" fill="#EF4444" fill-opacity="0.14" stroke="#EF4444" stroke-opacity="0.62"/>
-<text class="label" x="507.5" y="532.0" text-anchor="middle">eval tasks</text>
-<line x1="585" y1="527.0" x2="605" y2="527.0" stroke="#EF4444" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="605" y="512" width="155" height="30" rx="8" fill="#EF4444" fill-opacity="0.14" stroke="#EF4444" stroke-opacity="0.62"/>
-<text class="label" x="682.5" y="524.0" text-anchor="middle">baseline</text>
-<text class="label" x="682.5" y="540.0" text-anchor="middle">compare</text>
-<line x1="760" y1="527.0" x2="780" y2="527.0" stroke="#EF4444" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="780" y="512" width="155" height="30" rx="8" fill="#EF4444" fill-opacity="0.14" stroke="#EF4444" stroke-opacity="0.62"/>
-<text class="label" x="857.5" y="532.0" text-anchor="middle">ablation</text>
-<line x1="935" y1="527.0" x2="955" y2="527.0" stroke="#EF4444" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="955" y="512" width="155" height="30" rx="8" fill="#EF4444" fill-opacity="0.14" stroke="#EF4444" stroke-opacity="0.62"/>
-<text class="label" x="1032.5" y="524.0" text-anchor="middle">failure_tax</text>
-<text class="label" x="1032.5" y="540.0" text-anchor="middle">onomy</text>
-<line x1="640" y1="552" x2="640" y2="568" stroke="#64748B" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
-<rect x="70" y="572" width="1140" height="76" rx="14" fill="#151F33" stroke="#06B6D4" stroke-opacity="0.45" filter="url(#shadow)"/>
-<rect x="70" y="572" width="5" height="76" rx="3" fill="#06B6D4"/>
-<text class="section" x="88" y="601" fill="#06B6D4">L6 展示与历史问答</text>
-<text class="small" x="88" y="623" >Web 工作台、报告渲染、历史 QA 与 artifact service</text>
-<rect x="430" y="608" width="155" height="30" rx="8" fill="#06B6D4" fill-opacity="0.14" stroke="#06B6D4" stroke-opacity="0.62"/>
-<text class="label" x="507.5" y="628.0" text-anchor="middle">Gradio Web</text>
-<line x1="585" y1="623.0" x2="605" y2="623.0" stroke="#06B6D4" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="605" y="608" width="155" height="30" rx="8" fill="#06B6D4" fill-opacity="0.14" stroke="#06B6D4" stroke-opacity="0.62"/>
-<text class="label" x="682.5" y="628.0" text-anchor="middle">history_qa</text>
-<line x1="760" y1="623.0" x2="780" y2="623.0" stroke="#06B6D4" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="780" y="608" width="155" height="30" rx="8" fill="#06B6D4" fill-opacity="0.14" stroke="#06B6D4" stroke-opacity="0.62"/>
-<text class="label" x="857.5" y="620.0" text-anchor="middle">report</text>
-<text class="label" x="857.5" y="636.0" text-anchor="middle">render</text>
-<line x1="935" y1="623.0" x2="955" y2="623.0" stroke="#06B6D4" stroke-width="2" marker-end="url(#arrow)"/>
-<rect x="955" y="608" width="155" height="30" rx="8" fill="#06B6D4" fill-opacity="0.14" stroke="#06B6D4" stroke-opacity="0.62"/>
-<text class="label" x="1032.5" y="628.0" text-anchor="middle">artifacts</text>
-<rect x="380" y="670" width="120" height="28" rx="8" fill="#3B82F6" fill-opacity="0.14" stroke="#3B82F6" stroke-opacity="0.62"/>
-<text class="label" x="440.0" y="689.0" text-anchor="middle">LLM</text>
-<rect x="525" y="670" width="150" height="28" rx="8" fill="#10B981" fill-opacity="0.14" stroke="#10B981" stroke-opacity="0.62"/>
-<text class="label" x="600.0" y="681.0" text-anchor="middle">Symbolic</text>
-<text class="label" x="600.0" y="697.0" text-anchor="middle">Rule</text>
-<rect x="700" y="670" width="140" height="28" rx="8" fill="#8B5CF6" fill-opacity="0.14" stroke="#8B5CF6" stroke-opacity="0.62"/>
-<text class="label" x="770.0" y="689.0" text-anchor="middle">Data Store</text>
-<rect x="865" y="670" width="150" height="28" rx="8" fill="#F59E0B" fill-opacity="0.14" stroke="#F59E0B" stroke-opacity="0.62"/>
-<text class="label" x="940.0" y="681.0" text-anchor="middle">Tool /</text>
-<text class="label" x="940.0" y="697.0" text-anchor="middle">Executor</text>
+  <rect width="1600" height="900" fill="url(#halo)"/>
+  <text x="800.0" y="63.00000000000001" text-anchor="middle" fill="#FFFFFF" font-size="54" font-weight="900" filter="url(#deepShadow)">Academic Data Agent — 总体架构</text>
+  <text x="800.0" y="108.0" text-anchor="middle" fill="#C7CDD8" font-size="28" font-weight="500">面向可靠统计数据分析的神经符号 LLM 智能体</text>
+<rect x="44" y="128" width="78" height="92" rx="8" fill="#2F86FF" filter="url(#softGlow)"/>
+<rect x="84" y="128" width="260" height="92" rx="0" fill="#07152B" fill-opacity="0.82" stroke="#2F86FF" stroke-width="2"/>
+<rect x="122" y="128" width="222" height="92" fill="#07152B" fill-opacity="0.82"/>
+<rect x="84" y="150" width="42" height="48" rx="8" fill="#2F86FF" fill-opacity="0.78"/>
+<text x="105" y="185" fill="#FFFFFF" font-size="31" font-weight="900" text-anchor="middle" >1</text>
+<text x="142" y="167" fill="#FFFFFF" font-size="28" font-weight="850" text-anchor="start" >输入层 /</text>
+<text x="142" y="200" fill="#FFFFFF" font-size="28" font-weight="850" text-anchor="start" >数据上下文</text>
+<rect x="62" y="128" width="1238" height="92" rx="9" fill="#06162F" fill-opacity="0.72" stroke="#2F86FF" stroke-width="2.2"/>
+<rect x="294" y="145" width="156" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#2F86FF" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="372.0" y="169.63" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >main.py /</text>
+<text x="372.0" y="191.67" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >Gradio Web</text>
+<line x1="450" y1="174" x2="492" y2="174" stroke="#2F86FF" stroke-width="3" marker-end="url(#arrowBlue)"/>
+<rect x="498" y="145" width="198" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#2F86FF" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="597.0" y="180.84" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >document_ingestion</text>
+<line x1="696" y1="174" x2="738" y2="174" stroke="#2F86FF" stroke-width="3" marker-end="url(#arrowBlue)"/>
+<rect x="744" y="145" width="156" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#2F86FF" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="822.0" y="180.84" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >data_context</text>
+<line x1="900" y1="174" x2="942" y2="174" stroke="#2F86FF" stroke-width="3" marker-end="url(#arrowBlue)"/>
+<rect x="948" y="145" width="142" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#2F86FF" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="1019.0" y="180.84" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >config / .env</text>
+<line x1="1090" y1="174" x2="1132" y2="174" stroke="#2F86FF" stroke-width="3" marker-end="url(#arrowBlue)"/>
+<rect x="1138" y="145" width="142" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#2F86FF" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="1209.0" y="180.84" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >RuntimeConfig</text>
+<line x1="690" y1="220" x2="690" y2="236" stroke="#AEB7C7" stroke-width="2.5" marker-end="url(#arrowGray)"/>
+<rect x="44" y="238" width="78" height="92" rx="8" fill="#8A4DFF" filter="url(#softGlow)"/>
+<rect x="84" y="238" width="260" height="92" rx="0" fill="#07152B" fill-opacity="0.82" stroke="#8A4DFF" stroke-width="2"/>
+<rect x="122" y="238" width="222" height="92" fill="#07152B" fill-opacity="0.82"/>
+<rect x="84" y="260" width="42" height="48" rx="8" fill="#8A4DFF" fill-opacity="0.78"/>
+<text x="105" y="295" fill="#FFFFFF" font-size="31" font-weight="900" text-anchor="middle" >2</text>
+<text x="142" y="277" fill="#FFFFFF" font-size="28" font-weight="850" text-anchor="start" >检索层 /</text>
+<text x="142" y="310" fill="#FFFFFF" font-size="28" font-weight="850" text-anchor="start" >记忆系统</text>
+<rect x="62" y="238" width="1238" height="92" rx="9" fill="#06162F" fill-opacity="0.72" stroke="#8A4DFF" stroke-width="2.2"/>
+<rect x="294" y="255" width="210" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#8A4DFF" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="399.0" y="279.63" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >RAG 服务</text>
+<text x="399.0" y="301.67" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >(ChromaDB + 关键词)</text>
+<line x1="504" y1="284" x2="546" y2="284" stroke="#8A4DFF" stroke-width="3" marker-end="url(#arrowGray)"/>
+<rect x="552" y="255" width="186" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#8A4DFF" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="645.0" y="290.84" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >成功 / 失败记忆</text>
+<line x1="738" y1="284" x2="780" y2="284" stroke="#8A4DFF" stroke-width="3" marker-end="url(#arrowGray)"/>
+<rect x="786" y="255" width="282" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#8A4DFF" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="927.0" y="290.84" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >KnowledgeContextProvider</text>
+<line x1="1068" y1="284" x2="1110" y2="284" stroke="#8A4DFF" stroke-width="3" marker-end="url(#arrowGray)"/>
+<rect x="1116" y="255" width="184" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#8A4DFF" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="1208.0" y="290.84" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >证据登记簿</text>
+<line x1="690" y1="330" x2="690" y2="346" stroke="#AEB7C7" stroke-width="2.5" marker-end="url(#arrowGray)"/>
+<rect x="44" y="348" width="78" height="92" rx="8" fill="#FFB000" filter="url(#softGlow)"/>
+<rect x="84" y="348" width="260" height="92" rx="0" fill="#07152B" fill-opacity="0.82" stroke="#FFB000" stroke-width="2"/>
+<rect x="122" y="348" width="222" height="92" fill="#07152B" fill-opacity="0.82"/>
+<rect x="84" y="370" width="42" height="48" rx="8" fill="#FFB000" fill-opacity="0.78"/>
+<text x="105" y="405" fill="#FFFFFF" font-size="31" font-weight="900" text-anchor="middle" >3</text>
+<text x="142" y="387" fill="#FFFFFF" font-size="28" font-weight="850" text-anchor="start" >分析执行层 /</text>
+<text x="142" y="420" fill="#FFFFFF" font-size="28" font-weight="850" text-anchor="start" >分析执行层</text>
+<rect x="62" y="348" width="1238" height="92" rx="9" fill="#06162F" fill-opacity="0.72" stroke="#FFB000" stroke-width="2.2"/>
+<rect x="294" y="365" width="156" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#FFB000" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="372.0" y="389.63" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >LLM 推理</text>
+<text x="372.0" y="411.67" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >(DeepSeek V4 Flash)</text>
+<line x1="450" y1="394" x2="492" y2="394" stroke="#FFB000" stroke-width="3" marker-end="url(#arrowGray)"/>
+<rect x="498" y="365" width="198" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#FFB000" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="597.0" y="400.84" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >JSON 协议</text>
+<line x1="696" y1="394" x2="738" y2="394" stroke="#FFB000" stroke-width="3" marker-end="url(#arrowGray)"/>
+<rect x="744" y="365" width="156" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#FFB000" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="822.0" y="400.84" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >PythonInterpreterTool</text>
+<line x1="900" y1="394" x2="942" y2="394" stroke="#FFB000" stroke-width="3" marker-end="url(#arrowGray)"/>
+<rect x="948" y="365" width="142" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#FFB000" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="1019.0" y="400.84" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >TavilySearchTool</text>
+<line x1="1090" y1="394" x2="1132" y2="394" stroke="#FFB000" stroke-width="3" marker-end="url(#arrowGray)"/>
+<rect x="1138" y="365" width="142" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#FFB000" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="1209.0" y="400.84" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >prompts.py</text>
+<line x1="690" y1="440" x2="690" y2="456" stroke="#AEB7C7" stroke-width="2.5" marker-end="url(#arrowGray)"/>
+<rect x="44" y="458" width="78" height="92" rx="8" fill="#25CE79" filter="url(#softGlow)"/>
+<rect x="84" y="458" width="260" height="92" rx="0" fill="#07152B" fill-opacity="0.82" stroke="#25CE79" stroke-width="2"/>
+<rect x="122" y="458" width="222" height="92" fill="#07152B" fill-opacity="0.82"/>
+<rect x="84" y="480" width="42" height="48" rx="8" fill="#25CE79" fill-opacity="0.78"/>
+<text x="105" y="515" fill="#FFFFFF" font-size="31" font-weight="900" text-anchor="middle" >4</text>
+<text x="142" y="497" fill="#FFFFFF" font-size="28" font-weight="850" text-anchor="start" >治理层 /</text>
+<text x="142" y="530" fill="#FFFFFF" font-size="28" font-weight="850" text-anchor="start" >审计层</text>
+<rect x="62" y="458" width="1238" height="92" rx="9" fill="#06162F" fill-opacity="0.72" stroke="#25CE79" stroke-width="2.2"/>
+<rect x="294" y="475" width="156" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#25CE79" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="372.0" y="499.63" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >execution_audit</text>
+<text x="372.0" y="521.67" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >(AST)</text>
+<line x1="450" y1="504" x2="492" y2="504" stroke="#25CE79" stroke-width="3" marker-end="url(#arrowGray)"/>
+<rect x="498" y="475" width="198" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#25CE79" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="597.0" y="499.63" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >report_contract</text>
+<text x="597.0" y="521.67" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >(7 节检查)</text>
+<line x1="696" y1="504" x2="738" y2="504" stroke="#25CE79" stroke-width="3" marker-end="url(#arrowGray)"/>
+<rect x="744" y="475" width="156" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#25CE79" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="822.0" y="499.63" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >symbolic_rules</text>
+<text x="822.0" y="521.67" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >(9 条规则)</text>
+<line x1="900" y1="504" x2="942" y2="504" stroke="#25CE79" stroke-width="3" marker-end="url(#arrowGray)"/>
+<rect x="948" y="475" width="142" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#25CE79" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="1019.0" y="510.84" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >review_service</text>
+<line x1="1090" y1="504" x2="1132" y2="504" stroke="#25CE79" stroke-width="3" marker-end="url(#arrowGray)"/>
+<rect x="1138" y="475" width="142" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#25CE79" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="1209.0" y="510.84" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >vision_review</text>
+<line x1="690" y1="550" x2="690" y2="566" stroke="#AEB7C7" stroke-width="2.5" marker-end="url(#arrowGray)"/>
+<rect x="44" y="568" width="78" height="92" rx="8" fill="#FF4646" filter="url(#softGlow)"/>
+<rect x="84" y="568" width="260" height="92" rx="0" fill="#07152B" fill-opacity="0.82" stroke="#FF4646" stroke-width="2"/>
+<rect x="122" y="568" width="222" height="92" fill="#07152B" fill-opacity="0.82"/>
+<rect x="84" y="590" width="42" height="48" rx="8" fill="#FF4646" fill-opacity="0.78"/>
+<text x="105" y="625" fill="#FFFFFF" font-size="31" font-weight="900" text-anchor="middle" >5</text>
+<text x="142" y="607" fill="#FFFFFF" font-size="28" font-weight="850" text-anchor="start" >测试层 /</text>
+<text x="142" y="640" fill="#FFFFFF" font-size="28" font-weight="850" text-anchor="start" >回归层</text>
+<rect x="62" y="568" width="1238" height="92" rx="9" fill="#06162F" fill-opacity="0.72" stroke="#FF4646" stroke-width="2.2"/>
+<rect x="294" y="585" width="156" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#FF4646" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="372.0" y="609.63" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >eval/run_eval</text>
+<text x="372.0" y="631.67" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >(10 个任务)</text>
+<line x1="450" y1="614" x2="492" y2="614" stroke="#FF4646" stroke-width="3" marker-end="url(#arrowGray)"/>
+<rect x="498" y="585" width="198" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#FF4646" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="597.0" y="620.84" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >compare_baseline</text>
+<line x1="696" y1="614" x2="738" y2="614" stroke="#FF4646" stroke-width="3" marker-end="url(#arrowGray)"/>
+<rect x="744" y="585" width="156" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#FF4646" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="822.0" y="620.84" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >symbolic_ablation</text>
+<line x1="900" y1="614" x2="942" y2="614" stroke="#FF4646" stroke-width="3" marker-end="url(#arrowGray)"/>
+<rect x="948" y="585" width="142" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#FF4646" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="1019.0" y="620.84" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >failure_taxonomy</text>
+<line x1="1090" y1="614" x2="1132" y2="614" stroke="#FF4646" stroke-width="3" marker-end="url(#arrowGray)"/>
+<rect x="1138" y="585" width="142" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#FF4646" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="1209.0" y="620.84" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >regression_rules</text>
+<line x1="690" y1="660" x2="690" y2="676" stroke="#AEB7C7" stroke-width="2.5" marker-end="url(#arrowGray)"/>
+<rect x="44" y="678" width="78" height="92" rx="8" fill="#00C7D9" filter="url(#softGlow)"/>
+<rect x="84" y="678" width="260" height="92" rx="0" fill="#07152B" fill-opacity="0.82" stroke="#00C7D9" stroke-width="2"/>
+<rect x="122" y="678" width="222" height="92" fill="#07152B" fill-opacity="0.82"/>
+<rect x="84" y="700" width="42" height="48" rx="8" fill="#00C7D9" fill-opacity="0.78"/>
+<text x="105" y="735" fill="#FFFFFF" font-size="31" font-weight="900" text-anchor="middle" >6</text>
+<text x="142" y="717" fill="#FFFFFF" font-size="28" font-weight="850" text-anchor="start" >展示层 /</text>
+<text x="142" y="750" fill="#FFFFFF" font-size="28" font-weight="850" text-anchor="start" >问答层</text>
+<rect x="62" y="678" width="1238" height="92" rx="9" fill="#06162F" fill-opacity="0.72" stroke="#00C7D9" stroke-width="2.2"/>
+<rect x="294" y="695" width="156" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#00C7D9" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="372.0" y="730.84" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >Gradio Web 工作台</text>
+<line x1="450" y1="724" x2="492" y2="724" stroke="#00C7D9" stroke-width="3" marker-end="url(#arrowGray)"/>
+<rect x="498" y="695" width="198" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#00C7D9" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="597.0" y="730.84" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >CLI (Rich 终端)</text>
+<line x1="696" y1="724" x2="738" y2="724" stroke="#00C7D9" stroke-width="3" marker-end="url(#arrowGray)"/>
+<rect x="744" y="695" width="156" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#00C7D9" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="822.0" y="730.84" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >history_qa</text>
+<line x1="900" y1="724" x2="942" y2="724" stroke="#00C7D9" stroke-width="3" marker-end="url(#arrowGray)"/>
+<rect x="948" y="695" width="142" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#00C7D9" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="1019.0" y="730.84" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >展示渲染</text>
+<line x1="1090" y1="724" x2="1132" y2="724" stroke="#00C7D9" stroke-width="3" marker-end="url(#arrowGray)"/>
+<rect x="1138" y="695" width="142" height="58" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#00C7D9" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="1209.0" y="730.84" fill="#F8FAFC" font-size="19" font-weight="650" text-anchor="middle" >artifact_service</text>
+<rect x="1360" y="340" width="210" height="210" rx="18" fill="#071832" fill-opacity="0.72" stroke="#76A8FF" stroke-width="2.4" filter="url(#softGlow)"/>
+<text x="1465" y="405" fill="#79A9FF" font-size="72" font-weight="700" text-anchor="middle" >▦</text>
+<text x="1465" y="470" fill="#F8FAFC" font-size="30" font-weight="850" text-anchor="middle" >核心编排器 /</text>
+<text x="1465" y="510" fill="#F8FAFC" font-size="28" font-weight="850" text-anchor="middle" >agent_runner.py</text>
+<line x1="1300" y1="174" x2="1360" y2="174" stroke="#B7BEC9" stroke-width="2.2" stroke-dasharray="9 9" marker-end="url(#arrowGray)"/>
+<line x1="1300" y1="284" x2="1360" y2="284" stroke="#B7BEC9" stroke-width="2.2" stroke-dasharray="9 9" marker-end="url(#arrowGray)"/>
+<line x1="1300" y1="394" x2="1360" y2="394" stroke="#B7BEC9" stroke-width="2.2" stroke-dasharray="9 9" marker-end="url(#arrowGray)"/>
+<line x1="1300" y1="504" x2="1360" y2="504" stroke="#B7BEC9" stroke-width="2.2" stroke-dasharray="9 9" marker-end="url(#arrowGray)"/>
+<line x1="1300" y1="614" x2="1360" y2="614" stroke="#B7BEC9" stroke-width="2.2" stroke-dasharray="9 9" marker-end="url(#arrowGray)"/>
+<line x1="1300" y1="724" x2="1360" y2="724" stroke="#B7BEC9" stroke-width="2.2" stroke-dasharray="9 9" marker-end="url(#arrowGray)"/>
+<path d="M1300 174 H1508 Q1540 174 1540 340" fill="none" stroke="#B7BEC9" stroke-width="2.2" stroke-dasharray="9 9" marker-end="url(#arrowGray)"/>
+<path d="M1300 724 H1508 Q1540 724 1540 550" fill="none" stroke="#B7BEC9" stroke-width="2.2" stroke-dasharray="9 9" marker-end="url(#arrowGray)"/>
+<rect x="218" y="795" width="1140" height="70" rx="12" fill="#071832" fill-opacity="0.72" stroke="#5474B8" stroke-width="1.8"/>
+<rect x="260" y="814" width="30" height="30" rx="6" fill="#2F86FF" filter="url(#softGlow)"/>
+<text x="305" y="838" fill="#EAF2FF" font-size="26" font-weight="650" text-anchor="start" >蓝色 = LLM</text>
+<rect x="550" y="814" width="30" height="30" rx="6" fill="#25CE79" filter="url(#softGlow)"/>
+<text x="595" y="838" fill="#EAF2FF" font-size="26" font-weight="650" text-anchor="start" >绿色 = 符号规则</text>
+<rect x="840" y="814" width="30" height="30" rx="6" fill="#8A4DFF" filter="url(#softGlow)"/>
+<text x="885" y="838" fill="#EAF2FF" font-size="26" font-weight="650" text-anchor="start" >紫色 = 数据存储</text>
+<rect x="1130" y="814" width="30" height="30" rx="6" fill="#FFB000" filter="url(#softGlow)"/>
+<text x="1175" y="838" fill="#EAF2FF" font-size="26" font-weight="650" text-anchor="start" >琥珀色 = 工具 / 执行器</text>
 </svg>

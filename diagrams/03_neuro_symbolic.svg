@@ -1,91 +1,136 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="'Segoe UI','Microsoft YaHei',Arial,sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" font-family="'Segoe UI','Microsoft YaHei',Arial,sans-serif">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0B1220"/><stop offset="1" stop-color="#111C2F"/></linearGradient>
-    <filter id="shadow" x="-8%" y="-8%" width="116%" height="116%"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#020617" flood-opacity="0.22"/></filter>
-    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/></marker>
-    <marker id="arrowBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#3B82F6"/></marker>
-    <marker id="arrowGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#10B981"/></marker>
-    <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#EF4444"/></marker>
+    <radialGradient id="halo" cx="50%" cy="40%" r="75%">
+      <stop offset="0%" stop-color="#0B3A6E" stop-opacity="0.55"/>
+      <stop offset="48%" stop-color="#061A33" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#020817"/>
+    </radialGradient>
+    <filter id="softGlow" x="-35%" y="-35%" width="170%" height="170%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="deepShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000814" flood-opacity="0.42"/>
+    </filter>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#2F86FF"/></marker>
+    <marker id="arrowGray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#A7B1C3"/></marker>
+    <marker id="arrowAmber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#FFB000"/></marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#31D17B"/></marker>
+    <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#FF4949"/></marker>
     <style>
-      .title{fill:#F8FAFC;font-size:30px;font-weight:800;letter-spacing:0}
-      .sub{fill:#A8B3C7;font-size:14px}
-      .section{fill:#F8FAFC;font-size:16px;font-weight:800}
-      .label{fill:#F8FAFC;font-size:14px;font-weight:750}
-      .small{fill:#B9C5D8;font-size:12px}
-      .tiny{fill:#9DAAC0;font-size:11px}
-      .code{fill:#C7D2FE;font-size:11px;font-family:'Cascadia Mono','Consolas',monospace}
+      .mono { font-family:'Cascadia Mono','Consolas',monospace; }
+      .muted { fill:#C7D0DF; opacity:.9; }
+      .tiny { fill:#CBD5E1; font-size:18px; }
+      .bullet { fill:#F5F7FA; font-size:20px; }
     </style>
   </defs>
-  <rect width="1280" height="720" rx="18" fill="url(#bg)"/>
-  <text class="title" x="640" y="44" text-anchor="middle">Neuro-Symbolic 治理架构</text>
-  <text class="sub" x="640" y="70" text-anchor="middle">LLM 负责生成与推理，符号规则负责验证、阻断与返修</text>
-<rect x="70" y="102" width="530" height="560" rx="14" fill="#142238" stroke="#3B82F6" stroke-opacity="0.45" filter="url(#shadow)"/>
-<rect x="70" y="102" width="5" height="560" rx="3" fill="#3B82F6"/>
-<text class="section" x="88" y="131" fill="#3B82F6">Neural 神经侧</text>
-<text class="small" x="88" y="153" >语义理解、推理、文本生成与工具选择</text>
-<rect x="680" y="102" width="530" height="560" rx="14" fill="#102A2C" stroke="#10B981" stroke-opacity="0.45" filter="url(#shadow)"/>
-<rect x="680" y="102" width="5" height="560" rx="3" fill="#10B981"/>
-<text class="section" x="698" y="131" fill="#10B981">Symbolic 符号侧</text>
-<text class="small" x="698" y="153" >规则验证、AST 审计、报告契约与阻断返修</text>
-<rect x="130" y="166" width="410" height="52" rx="8" fill="#3B82F6" fill-opacity="0.14" stroke="#3B82F6" stroke-opacity="0.62"/>
-<text class="label" x="335.0" y="189.0" text-anchor="middle">DeepSeek V4 Flash</text>
-<text class="tiny" x="335.0" y="206" text-anchor="middle">主力 LLM，输出 JSON 动作</text>
-<rect x="130" y="238" width="410" height="52" rx="8" fill="#3B82F6" fill-opacity="0.14" stroke="#3B82F6" stroke-opacity="0.62"/>
-<text class="label" x="335.0" y="261.0" text-anchor="middle">Vision LLM</text>
-<text class="tiny" x="335.0" y="278" text-anchor="middle">可配置视觉审稿</text>
-<rect x="130" y="310" width="410" height="52" rx="8" fill="#3B82F6" fill-opacity="0.14" stroke="#3B82F6" stroke-opacity="0.62"/>
-<text class="label" x="335.0" y="333.0" text-anchor="middle">Prompt Engineering</text>
-<text class="tiny" x="335.0" y="350" text-anchor="middle">系统提示、反馈提示、审稿提示</text>
-<rect x="130" y="382" width="410" height="52" rx="8" fill="#3B82F6" fill-opacity="0.14" stroke="#3B82F6" stroke-opacity="0.62"/>
-<text class="label" x="335.0" y="405.0" text-anchor="middle">Knowledge Context</text>
-<text class="tiny" x="335.0" y="422" text-anchor="middle">记忆、RAG 引用、用户意图</text>
-<rect x="130" y="454" width="410" height="52" rx="8" fill="#3B82F6" fill-opacity="0.14" stroke="#3B82F6" stroke-opacity="0.62"/>
-<text class="label" x="335.0" y="477.0" text-anchor="middle">Tools</text>
-<text class="tiny" x="335.0" y="494" text-anchor="middle">PythonInterpreterTool / TavilySearchTool</text>
-<rect x="130" y="526" width="410" height="52" rx="8" fill="#3B82F6" fill-opacity="0.14" stroke="#3B82F6" stroke-opacity="0.62"/>
-<text class="label" x="335.0" y="549.0" text-anchor="middle">JSON 协议</text>
-<text class="tiny" x="335.0" y="566" text-anchor="middle">action / tool_name / tool_input</text>
-<line x1="640" y1="104" x2="640" y2="662" stroke="#94A3B8" stroke-width="2" stroke-dasharray="7 7"/>
-<line x1="600" y1="270" x2="672" y2="270" stroke="#10B981" stroke-width="2" marker-end="url(#arrowGreen)"/>
-<line x1="600" y1="384" x2="672" y2="384" stroke="#10B981" stroke-width="2" marker-end="url(#arrowGreen)"/>
-<line x1="600" y1="498" x2="672" y2="498" stroke="#10B981" stroke-width="2" marker-end="url(#arrowGreen)"/>
-<rect x="720" y="160" width="430" height="94" rx="10" fill="#064E3B" fill-opacity="0.34" stroke="#10B981" stroke-opacity="0.45"/>
-<text class="section" x="740" y="186" fill="#34D399">执行审计规则（3 条）</text>
-<text class="code" x="1010" y="186" >execution_audit.py</text>
-<rect x="740" y="202" width="240" height="15" rx="8" fill="#10B981" fill-opacity="0.14" stroke="#10B981" stroke-opacity="0.62"/>
-<text class="label" x="860.0" y="206.5" text-anchor="middle">Stage1 必须保存</text>
-<text class="label" x="860.0" y="222.5" text-anchor="middle">cleaned_data</text>
-<rect x="740" y="219" width="240" height="15" rx="8" fill="#10B981" fill-opacity="0.14" stroke="#10B981" stroke-opacity="0.62"/>
-<text class="label" x="860.0" y="223.5" text-anchor="middle">Stage2 必须重读</text>
-<text class="label" x="860.0" y="239.5" text-anchor="middle">cleaned_data</text>
-<rect x="740" y="236" width="240" height="15" rx="8" fill="#10B981" fill-opacity="0.14" stroke="#10B981" stroke-opacity="0.62"/>
-<text class="label" x="860.0" y="248.5" text-anchor="middle">禁止清洗后复用原始数据</text>
-<rect x="720" y="290" width="430" height="94" rx="10" fill="#064E3B" fill-opacity="0.34" stroke="#10B981" stroke-opacity="0.45"/>
-<text class="section" x="740" y="316" fill="#34D399">报告契约规则（4 条）</text>
-<text class="code" x="1010" y="316" >report_contract.py</text>
-<rect x="740" y="332" width="240" height="15" rx="8" fill="#10B981" fill-opacity="0.14" stroke="#10B981" stroke-opacity="0.62"/>
-<text class="label" x="860.0" y="344.5" text-anchor="middle">报告必须包含关键章节</text>
-<rect x="740" y="349" width="240" height="15" rx="8" fill="#10B981" fill-opacity="0.14" stroke="#10B981" stroke-opacity="0.62"/>
-<text class="label" x="860.0" y="361.5" text-anchor="middle">图表必须解释</text>
-<rect x="740" y="366" width="240" height="15" rx="8" fill="#10B981" fill-opacity="0.14" stroke="#10B981" stroke-opacity="0.62"/>
-<text class="label" x="860.0" y="378.5" text-anchor="middle">统计/CI 表达要规范</text>
-<rect x="740" y="383" width="240" height="15" rx="8" fill="#10B981" fill-opacity="0.14" stroke="#10B981" stroke-opacity="0.62"/>
-<text class="label" x="860.0" y="395.5" text-anchor="middle">禁止因果化语言</text>
-<rect x="720" y="420" width="430" height="94" rx="10" fill="#064E3B" fill-opacity="0.34" stroke="#10B981" stroke-opacity="0.45"/>
-<text class="section" x="740" y="446" fill="#34D399">证据与任务对齐（2 条）</text>
-<text class="code" x="1010" y="446" >reporting.py</text>
-<rect x="740" y="462" width="240" height="15" rx="8" fill="#10B981" fill-opacity="0.14" stroke="#10B981" stroke-opacity="0.62"/>
-<text class="label" x="860.0" y="466.5" text-anchor="middle">引用必须回到 evidence</text>
-<text class="label" x="860.0" y="482.5" text-anchor="middle">register</text>
-<rect x="740" y="479" width="240" height="15" rx="8" fill="#10B981" fill-opacity="0.14" stroke="#10B981" stroke-opacity="0.62"/>
-<text class="label" x="860.0" y="491.5" text-anchor="middle">输出必须对齐任务数据结构</text>
-<rect x="720" y="560" width="430" height="70" rx="10" fill="#1F2937" stroke="#F59E0B" stroke-opacity="0.55"/>
-<text class="section" x="740" y="588" fill="#FBBF24">消融配置 Symbolic Profiles</text>
-<rect x="740" y="604" width="110" height="28" rx="8" fill="#10B981" fill-opacity="0.14" stroke="#10B981" stroke-opacity="0.62"/>
-<text class="label" x="795.0" y="623.0" text-anchor="middle">full</text>
-<rect x="880" y="604" width="130" height="28" rx="8" fill="#F59E0B" fill-opacity="0.14" stroke="#F59E0B" stroke-opacity="0.62"/>
-<text class="label" x="945.0" y="615.0" text-anchor="middle">prompt_onl</text>
-<text class="label" x="945.0" y="631.0" text-anchor="middle">y</text>
-<rect x="1040" y="604" width="90" height="28" rx="8" fill="#EF4444" fill-opacity="0.14" stroke="#EF4444" stroke-opacity="0.62"/>
-<text class="label" x="1085.0" y="623.0" text-anchor="middle">none</text>
+  <rect width="1600" height="900" fill="url(#halo)"/>
+  <text x="800.0" y="63.00000000000001" text-anchor="middle" fill="#FFFFFF" font-size="54" font-weight="900" filter="url(#deepShadow)">神经符号治理架构</text>
+  <text x="800.0" y="108.0" text-anchor="middle" fill="#C7CDD8" font-size="28" font-weight="500">9 条符号规则 + AST 审计 + 报告契约 + 3 种消融配置</text>
+<rect x="22" y="120" width="625" height="745" rx="12" fill="#041B3B" fill-opacity="0.72" stroke="#4387FF" stroke-width="2" filter="url(#softGlow)"/>
+<rect x="827" y="120" width="725" height="635" rx="12" fill="#03251F" fill-opacity="0.72" stroke="#31D17B" stroke-width="2" filter="url(#softGlow)"/>
+<text x="322" y="160" fill="#5B93FF" font-size="34" font-weight="900" text-anchor="middle" >神经侧（Neural Side）</text>
+<text x="322" y="194" fill="#D5DCE8" font-size="22" font-weight="560" text-anchor="middle" >语义理解、推理与文本生成</text>
+<text x="1190" y="160" fill="#5FE289" font-size="34" font-weight="900" text-anchor="middle" >符号侧（Symbolic Side）</text>
+<text x="1190" y="194" fill="#D5DCE8" font-size="22" font-weight="560" text-anchor="middle" >规则校验、AST 审计、契约检查、阻断与修复</text>
+<rect x="54" y="205" width="560" height="116" rx="9" fill="#062149" fill-opacity="0.72" stroke="#4387FF" stroke-width="1.8" filter="url(#softGlow)"/>
+<text x="112" y="269" fill="#6EA2FF" font-size="58" font-weight="700" text-anchor="middle" >♙</text>
+<text x="187" y="239" fill="#98BDFF" font-size="26" font-weight="850" text-anchor="start" >DeepSeek V4 Flash（主 LLM）</text>
+<text x="187" y="270" fill="#F1F5F9" font-size="18" font-weight="500" text-anchor="start" >• JSON 结构化输出        • 报告写作</text>
+<text x="187" y="294" fill="#F1F5F9" font-size="18" font-weight="500" text-anchor="start" >• ReAct 推理             • 数据分析</text>
+<text x="187" y="318" fill="#F1F5F9" font-size="18" font-weight="500" text-anchor="start" >• thinking-disabled mode</text>
+<line x1="327" y1="321" x2="327" y2="335" stroke="#B7BEC9" stroke-width="3" marker-end="url(#arrowGray)"/>
+<rect x="54" y="340" width="560" height="78" rx="9" fill="#062149" fill-opacity="0.72" stroke="#4387FF" stroke-width="1.8" filter="url(#softGlow)"/>
+<text x="112" y="404" fill="#6EA2FF" font-size="58" font-weight="700" text-anchor="middle" >▣</text>
+<text x="187" y="374" fill="#98BDFF" font-size="26" font-weight="850" text-anchor="start" >Qwen VL Max（视觉评审）</text>
+<text x="187" y="405" fill="#F1F5F9" font-size="18" font-weight="500" text-anchor="start" >• 图表质量评审        • 标签可读性        • 坐标轴检查</text>
+<line x1="327" y1="418" x2="327" y2="432" stroke="#B7BEC9" stroke-width="3" marker-end="url(#arrowGray)"/>
+<rect x="54" y="438" width="560" height="116" rx="9" fill="#062149" fill-opacity="0.72" stroke="#4387FF" stroke-width="1.8" filter="url(#softGlow)"/>
+<text x="112" y="502" fill="#6EA2FF" font-size="42" font-weight="800" text-anchor="middle" >{ }</text>
+<text x="187" y="472" fill="#98BDFF" font-size="26" font-weight="850" text-anchor="start" >Prompt Engineering（prompts.py）</text>
+<text x="187" y="503" fill="#F1F5F9" font-size="18" font-weight="500" text-anchor="start" >• build_system_prompt() 约 260 行</text>
+<text x="187" y="527" fill="#F1F5F9" font-size="18" font-weight="500" text-anchor="start" >• 学术护栏               • 绘图协议</text>
+<text x="187" y="551" fill="#F1F5F9" font-size="18" font-weight="500" text-anchor="start" >• 报告契约清单           • 符号规则注入</text>
+<line x1="327" y1="554" x2="327" y2="568" stroke="#B7BEC9" stroke-width="3" marker-end="url(#arrowGray)"/>
+<rect x="54" y="573" width="560" height="78" rx="9" fill="#062149" fill-opacity="0.72" stroke="#4387FF" stroke-width="1.8" filter="url(#softGlow)"/>
+<text x="112" y="637" fill="#6EA2FF" font-size="58" font-weight="700" text-anchor="middle" >▱</text>
+<text x="187" y="607" fill="#98BDFF" font-size="26" font-weight="850" text-anchor="start" >知识上下文组装</text>
+<text x="187" y="638" fill="#F1F5F9" font-size="18" font-weight="500" text-anchor="start" >• 用户意图               • RAG 引用</text>
+<text x="187" y="662" fill="#F1F5F9" font-size="18" font-weight="500" text-anchor="start" >• 成功 / 失败记忆        • 证据登记簿</text>
+<line x1="327" y1="651" x2="327" y2="665" stroke="#B7BEC9" stroke-width="3" marker-end="url(#arrowGray)"/>
+<rect x="54" y="662" width="278" height="72" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#4387FF" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="193.0" y="693.1700000000001" fill="#F8FAFC" font-size="21" font-weight="650" text-anchor="middle" >PythonInterpreterTool</text>
+<text x="193.0" y="717.5300000000001" fill="#F8FAFC" font-size="21" font-weight="650" text-anchor="middle" >exec() sandbox</text>
+<rect x="350" y="662" width="264" height="72" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#4387FF" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="482.0" y="693.1700000000001" fill="#F8FAFC" font-size="21" font-weight="650" text-anchor="middle" >TavilySearchTool</text>
+<text x="482.0" y="717.5300000000001" fill="#F8FAFC" font-size="21" font-weight="650" text-anchor="middle" >domain search</text>
+<line x1="327" y1="635" x2="327" y2="662" stroke="#B7BEC9" stroke-width="3" marker-end="url(#arrowGray)"/>
+<line x1="327" y1="734" x2="327" y2="754" stroke="#B7BEC9" stroke-width="3" marker-end="url(#arrowGray)"/>
+<rect x="54" y="754" width="560" height="92" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#4387FF" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="334.0" y="808.28" fill="#F8FAFC" font-size="23" font-weight="650" text-anchor="middle" >JSON 结构化协议</text>
+<text x="334.0" y="833" fill="#B9C5D8" font-size="14" font-weight="500" text-anchor="middle" >{decision, reasoning, action, tool_name, tool_input, final_answer}</text>
+<line x1="740" y1="115" x2="740" y2="865" stroke="#B8C0CD" stroke-width="3" stroke-dasharray="9 9"/>
+<rect x="677" y="431" width="126" height="86" rx="14" fill="#07152B" fill-opacity="0.72" stroke="#D5DCE8" stroke-width="2" filter="url(#softGlow)"/>
+<text x="740" y="475" fill="#F8FAFC" font-size="28" font-weight="850" text-anchor="middle" >约束 /</text>
+<text x="740" y="505" fill="#F8FAFC" font-size="20" font-weight="650" text-anchor="middle" >Constraints</text>
+<rect x="850" y="205" width="680" height="116" rx="10" fill="#052B22" fill-opacity="0.72" stroke="#31D17B" stroke-width="1.8" filter="url(#softGlow)"/>
+<text x="904" y="273" fill="#5FE289" font-size="58" font-weight="900" text-anchor="middle" >✓</text>
+<text x="960" y="241" fill="#5FE289" font-size="27" font-weight="900" text-anchor="start" >执行审计规则（3 条）</text>
+<text x="960" y="271" fill="#F8FAFC" font-size="18" font-weight="500" text-anchor="start" >• stage.save_cleaned_data</text>
+<text x="960" y="295" fill="#F8FAFC" font-size="18" font-weight="500" text-anchor="start" >• stage.reload_cleaned_data</text>
+<text x="960" y="319" fill="#F8FAFC" font-size="18" font-weight="500" text-anchor="start" >• stage.no_raw_reuse</text>
+<line x1="1220" y1="232" x2="1220" y2="305" stroke="#57D98A" stroke-width="2"/>
+<text x="1240" y="260" fill="#F8FAFC" font-size="18" font-weight="500" text-anchor="start" >实现：execution_audit.py</text>
+<text x="1240" y="289" fill="#F8FAFC" font-size="18" font-weight="500" text-anchor="start" >方法：AST 语法树分析 / _PathAuditVisitor</text>
+<text x="1240" y="318" fill="#FF5D5D" font-size="18" font-weight="500" text-anchor="start" >严重级别：blocking</text>
+<line x1="790" y1="431" x2="850" y2="263" stroke="#31D17B" stroke-width="3" marker-end="url(#arrowGreen)"/>
+<rect x="850" y="358" width="680" height="116" rx="10" fill="#052B22" fill-opacity="0.72" stroke="#31D17B" stroke-width="1.8" filter="url(#softGlow)"/>
+<text x="904" y="426" fill="#5FE289" font-size="54" font-weight="700" text-anchor="middle" >▣</text>
+<text x="960" y="394" fill="#5FE289" font-size="27" font-weight="900" text-anchor="start" >报告契约规则（4 条）</text>
+<text x="960" y="424" fill="#F8FAFC" font-size="18" font-weight="500" text-anchor="start" >• report.required_sections (7 个章节)</text>
+<text x="960" y="448" fill="#F8FAFC" font-size="18" font-weight="500" text-anchor="start" >• report.figure_interpretation</text>
+<text x="960" y="472" fill="#F8FAFC" font-size="18" font-weight="500" text-anchor="start" >• report.statistical_reporting (效应量 / CI)</text>
+<text x="960" y="496" fill="#F8FAFC" font-size="18" font-weight="500" text-anchor="start" >• report.non_causal_language</text>
+<line x1="1220" y1="385" x2="1220" y2="458" stroke="#57D98A" stroke-width="2"/>
+<text x="1240" y="413" fill="#F8FAFC" font-size="18" font-weight="500" text-anchor="start" >实现：report_contract.py</text>
+<text x="1240" y="442" fill="#F8FAFC" font-size="18" font-weight="500" text-anchor="start" >方法：正则检测</text>
+<text x="1240" y="471" fill="#FF5D5D" font-size="18" font-weight="500" text-anchor="start" >严重级别：blocking</text>
+<line x1="790" y1="431" x2="850" y2="416" stroke="#31D17B" stroke-width="3" marker-end="url(#arrowGreen)"/>
+<rect x="850" y="511" width="680" height="116" rx="10" fill="#052B22" fill-opacity="0.72" stroke="#31D17B" stroke-width="1.8" filter="url(#softGlow)"/>
+<text x="904" y="579" fill="#5FE289" font-size="58" font-weight="700" text-anchor="middle" >⚖</text>
+<text x="960" y="547" fill="#5FE289" font-size="27" font-weight="900" text-anchor="start" >证据与任务对齐规则（2 条）</text>
+<text x="960" y="577" fill="#F8FAFC" font-size="18" font-weight="500" text-anchor="start" >• evidence.valid_citations</text>
+<text x="960" y="601" fill="#F8FAFC" font-size="18" font-weight="500" text-anchor="start" >• task.data_structure_alignment</text>
+<line x1="1220" y1="538" x2="1220" y2="611" stroke="#57D98A" stroke-width="2"/>
+<text x="1240" y="566" fill="#FF5D5D" font-size="18" font-weight="500" text-anchor="start" >严重级别：blocking / warning</text>
+<line x1="790" y1="431" x2="850" y2="569" stroke="#31D17B" stroke-width="3" marker-end="url(#arrowGreen)"/>
+<rect x="850" y="610" width="680" height="130" rx="10" fill="#052B22" fill-opacity="0.72" stroke="#31D17B" stroke-width="1.8" filter="url(#softGlow)"/>
+<text x="1190" y="638" fill="#5FE289" font-size="27" font-weight="900" text-anchor="middle" >消融配置（Symbolic Profiles）</text>
+<rect x="865" y="654" width="180" height="78" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#31D17B" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="955.0" y="676.8" fill="#F8FAFC" font-size="20" font-weight="650" text-anchor="middle" >full</text>
+<text x="955.0" y="700.0" fill="#F8FAFC" font-size="20" font-weight="650" text-anchor="middle" >prompt + checker</text>
+<text x="955.0" y="723.1999999999999" fill="#F8FAFC" font-size="20" font-weight="650" text-anchor="middle" >+ blocking</text>
+<rect x="1070" y="654" width="210" height="78" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#FFB000" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="1175.0" y="688.4" fill="#F8FAFC" font-size="20" font-weight="650" text-anchor="middle" >prompt_only</text>
+<text x="1175.0" y="711.6" fill="#F8FAFC" font-size="20" font-weight="650" text-anchor="middle" >仅提示约束（soft）</text>
+<rect x="1305" y="654" width="190" height="78" rx="9" fill="#07182D" fill-opacity="0.72" stroke="#FF4949" stroke-width="2.2" filter="url(#softGlow)"/>
+<text x="1400.0" y="688.4" fill="#F8FAFC" font-size="20" font-weight="650" text-anchor="middle" >none</text>
+<text x="1400.0" y="711.6" fill="#F8FAFC" font-size="20" font-weight="650" text-anchor="middle" >仅 JSON / 工具协议</text>
+<rect x="780" y="770" width="800" height="78" rx="10" fill="#052B22" fill-opacity="0.72" stroke="#31D17B" stroke-width="1.8" filter="url(#softGlow)"/>
+<text x="1180" y="800" fill="#5FE289" font-size="24" font-weight="850" text-anchor="middle" >SymbolicRule 数据结构</text>
+<text x="845" y="830" fill="#F8FAFC" font-size="16" font-weight="500" text-anchor="middle" >rule_id</text>
+<text x="940" y="830" fill="#F8FAFC" font-size="16" font-weight="500" text-anchor="middle" >category</text>
+<line x1="895" y1="806" x2="895" y2="846" stroke="#57D98A" stroke-width="1.5"/>
+<text x="1035" y="830" fill="#F8FAFC" font-size="16" font-weight="500" text-anchor="middle" >description</text>
+<line x1="990" y1="806" x2="990" y2="846" stroke="#57D98A" stroke-width="1.5"/>
+<text x="1130" y="830" fill="#F8FAFC" font-size="16" font-weight="500" text-anchor="middle" >severity</text>
+<line x1="1085" y1="806" x2="1085" y2="846" stroke="#57D98A" stroke-width="1.5"/>
+<text x="1225" y="830" fill="#F8FAFC" font-size="16" font-weight="500" text-anchor="middle" >prompt_text</text>
+<line x1="1180" y1="806" x2="1180" y2="846" stroke="#57D98A" stroke-width="1.5"/>
+<text x="1320" y="830" fill="#F8FAFC" font-size="16" font-weight="500" text-anchor="middle" >checker_name</text>
+<line x1="1275" y1="806" x2="1275" y2="846" stroke="#57D98A" stroke-width="1.5"/>
+<text x="1415" y="830" fill="#F8FAFC" font-size="16" font-weight="500" text-anchor="middle" >failure_message</text>
+<line x1="1370" y1="806" x2="1370" y2="846" stroke="#57D98A" stroke-width="1.5"/>
+<text x="1510" y="830" fill="#F8FAFC" font-size="16" font-weight="500" text-anchor="middle" >repair_hint</text>
+<line x1="1465" y1="806" x2="1465" y2="846" stroke="#57D98A" stroke-width="1.5"/>
 </svg>
