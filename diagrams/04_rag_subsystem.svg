@@ -1,141 +1,90 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 900" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="'Segoe UI','Microsoft YaHei',Arial,sans-serif">
   <defs>
-    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#0F172A"/>
-      <stop offset="100%" stop-color="#1E293B"/>
-    </linearGradient>
-    <marker id="arrPurple" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="7" markerHeight="5" orient="auto">
-      <polygon points="0 0, 10 3.5, 0 7" fill="#8B5CF6"/>
-    </marker>
-    <marker id="arrGreen" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="7" markerHeight="5" orient="auto">
-      <polygon points="0 0, 10 3.5, 0 7" fill="#10B981"/>
-    </marker>
-    <marker id="arrGray" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="7" markerHeight="5" orient="auto">
-      <polygon points="0 0, 10 3.5, 0 7" fill="#94A3B8"/>
-    </marker>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0B1220"/><stop offset="1" stop-color="#111C2F"/></linearGradient>
+    <filter id="shadow" x="-8%" y="-8%" width="116%" height="116%"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#020617" flood-opacity="0.22"/></filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/></marker>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#3B82F6"/></marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#10B981"/></marker>
+    <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#EF4444"/></marker>
+    <style>
+      .title{fill:#F8FAFC;font-size:30px;font-weight:800;letter-spacing:0}
+      .sub{fill:#A8B3C7;font-size:14px}
+      .section{fill:#F8FAFC;font-size:16px;font-weight:800}
+      .label{fill:#F8FAFC;font-size:14px;font-weight:750}
+      .small{fill:#B9C5D8;font-size:12px}
+      .tiny{fill:#9DAAC0;font-size:11px}
+      .code{fill:#C7D2FE;font-size:11px;font-family:'Cascadia Mono','Consolas',monospace}
+    </style>
   </defs>
-
-  <rect width="1400" height="900" fill="url(#bgGrad)" rx="16"/>
-
-  <!-- Title -->
-  <text x="700" y="48" text-anchor="middle" fill="#F8FAFC" font-size="28" font-weight="700">RAG 检索子系统</text>
-  <text x="700" y="72" text-anchor="middle" fill="#94A3B8" font-size="13">ChromaDB 向量检索 + 关键词检索 → 混合重排序 → 证据寄存</text>
-
-  <!-- ═══ Phase 1: Document Ingestion & Indexing ═══ -->
-  <rect x="60" y="100" width="1280" height="175" rx="12" fill="#2D1B69" fill-opacity="0.12" stroke="#8B5CF6" stroke-opacity="0.25"/>
-  <text x="80" y="130" fill="#8B5CF6" font-size="16" font-weight="700">Phase 1 — 文档摄入与索引</text>
-
-  <rect x="80" y="150" width="155" height="45" rx="8" fill="#4C1D95" fill-opacity="0.4" stroke="#8B5CF6" stroke-opacity="0.35"/>
-  <text x="158" y="170" text-anchor="middle" fill="#C4B5FD" font-size="11" font-weight="600">用户上传文件</text>
-  <text x="158" y="185" text-anchor="middle" fill="#A78BFA" font-size="10">.txt / .md / .pdf</text>
-
-  <rect x="275" y="150" width="185" height="45" rx="8" fill="#4C1D95" fill-opacity="0.4" stroke="#8B5CF6" stroke-opacity="0.35"/>
-  <text x="368" y="170" text-anchor="middle" fill="#C4B5FD" font-size="11" font-weight="600">document_reader</text>
-  <text x="368" y="185" text-anchor="middle" fill="#A78BFA" font-size="10">加载 · 分段 · 分块(overlap)</text>
-
-  <rect x="500" y="150" width="185" height="45" rx="8" fill="#4C1D95" fill-opacity="0.4" stroke="#8B5CF6" stroke-opacity="0.35"/>
-  <text x="593" y="170" text-anchor="middle" fill="#C4B5FD" font-size="11" font-weight="600">embeddings</text>
-  <text x="593" y="185" text-anchor="middle" fill="#A78BFA" font-size="10">OpenAI Embedding Client</text>
-
-  <rect x="725" y="145" width="185" height="55" rx="8" fill="#4C1D95" fill-opacity="0.4" stroke="#8B5CF6" stroke-opacity="0.35"/>
-  <text x="818" y="168" text-anchor="middle" fill="#C4B5FD" font-size="11" font-weight="600">vector_store</text>
-  <text x="818" y="183" text-anchor="middle" fill="#A78BFA" font-size="10">ChromaDB PersistentClient</text>
-  <text x="818" y="197" text-anchor="middle" fill="#A78BFA" font-size="10">密集向量存储</text>
-
-  <rect x="950" y="145" width="185" height="55" rx="8" fill="#4C1D95" fill-opacity="0.4" stroke="#8B5CF6" stroke-opacity="0.35"/>
-  <text x="1043" y="168" text-anchor="middle" fill="#C4B5FD" font-size="11" font-weight="600">keyword_index</text>
-  <text x="1043" y="183" text-anchor="middle" fill="#A78BFA" font-size="10">JSON TF-IDF 索引</text>
-  <text x="1043" y="197" text-anchor="middle" fill="#A78BFA" font-size="10">无 embedding 时回退</text>
-
-  <path d="M235,172 L275,172" stroke="#8B5CF6" stroke-width="1.5" marker-end="url(#arrPurple)"/>
-  <path d="M460,172 L500,172" stroke="#8B5CF6" stroke-width="1.5" marker-end="url(#arrPurple)"/>
-  <path d="M685,172 L725,172" stroke="#8B5CF6" stroke-width="1.5" marker-end="url(#arrPurple)"/>
-  <path d="M685,175 C710,200 900,200 950,175" stroke="#8B5CF6" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrPurple)"/>
-
-  <!-- ═══ Phase 2: Retrieval & Reranking ═══ -->
-  <rect x="60" y="300" width="1280" height="290" rx="12" fill="#2D1B69" fill-opacity="0.12" stroke="#8B5CF6" stroke-opacity="0.25"/>
-  <text x="80" y="330" fill="#8B5CF6" font-size="16" font-weight="700">Phase 2 — 检索与重排序</text>
-
-  <rect x="80" y="350" width="200" height="55" rx="8" fill="#4C1D95" fill-opacity="0.4" stroke="#8B5CF6" stroke-opacity="0.35"/>
-  <text x="180" y="373" text-anchor="middle" fill="#C4B5FD" font-size="12" font-weight="600">query_builder</text>
-  <text x="180" y="390" text-anchor="middle" fill="#A78BFA" font-size="10">build_retrieval_queries()</text>
-  <text x="180" y="402" text-anchor="middle" fill="#A78BFA" font-size="10">dense + keyword query bundles</text>
-
-  <rect x="330" y="345" width="225" height="65" rx="8" fill="#4C1D95" fill-opacity="0.4" stroke="#8B5CF6" stroke-opacity="0.35"/>
-  <text x="443" y="368" text-anchor="middle" fill="#C4B5FD" font-size="12" font-weight="600">密集向量检索</text>
-  <text x="443" y="385" text-anchor="middle" fill="#A78BFA" font-size="10">ChromaDB query → 余弦相似度</text>
-  <text x="443" y="400" text-anchor="middle" fill="#A78BFA" font-size="10">embedding 维度匹配</text>
-
-  <rect x="595" y="345" width="225" height="65" rx="8" fill="#4C1D95" fill-opacity="0.4" stroke="#8B5CF6" stroke-opacity="0.35"/>
-  <text x="708" y="368" text-anchor="middle" fill="#C4B5FD" font-size="12" font-weight="600">关键词检索</text>
-  <text x="708" y="385" text-anchor="middle" fill="#A78BFA" font-size="10">TF-IDF 关键词评分</text>
-  <text x="708" y="400" text-anchor="middle" fill="#A78BFA" font-size="10">无 embedding 时独立运行</text>
-
-  <rect x="875" y="335" width="245" height="85" rx="8" fill="#2D1B69" fill-opacity="0.5" stroke="#8B5CF6" stroke-opacity="0.45"/>
-  <text x="998" y="360" text-anchor="middle" fill="#C4B5FD" font-size="13" font-weight="600">reranker (混合重排序)</text>
-  <text x="998" y="380" text-anchor="middle" fill="#A78BFA" font-size="10">dense × 1.6 + keyword × 0.35</text>
-  <text x="998" y="395" text-anchor="middle" fill="#A78BFA" font-size="10">+ query/column/header 匹配</text>
-  <text x="998" y="410" text-anchor="middle" fill="#A78BFA" font-size="10">+ 知识类型权重 + 源惩罚</text>
-
-  <path d="M280,377 L330,377" stroke="#8B5CF6" stroke-width="1.5" marker-end="url(#arrPurple)"/>
-  <path d="M280,382 C305,400 565,400 595,382" stroke="#8B5CF6" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrPurple)"/>
-  <path d="M555,377 L600,377" stroke="#8B5CF6" stroke-width="1.5" marker-end="url(#arrPurple)"/>
-  <path d="M820,377 L875,377" stroke="#8B5CF6" stroke-width="1.5" marker-end="url(#arrPurple)"/>
-
-  <!-- ═══ Phase 3: Output ═══ -->
-  <rect x="330" y="455" width="560" height="115" rx="10" fill="#064E3B" fill-opacity="0.15" stroke="#10B981" stroke-opacity="0.25"/>
-  <text x="610" y="480" text-anchor="middle" fill="#10B981" font-size="13" font-weight="700">输出 — RagRetrievalResult</text>
-
-  <rect x="350" y="495" width="160" height="32" rx="6" fill="#064E3B" fill-opacity="0.35" stroke="#10B981" stroke-opacity="0.25"/>
-  <text x="430" y="516" text-anchor="middle" fill="#6EE7B7" font-size="11">RetrievedChunk[]</text>
-  <rect x="540" y="495" width="160" height="32" rx="6" fill="#064E3B" fill-opacity="0.35" stroke="#10B981" stroke-opacity="0.25"/>
-  <text x="620" y="516" text-anchor="middle" fill="#6EE7B7" font-size="11">Evidence Register</text>
-  <rect x="730" y="495" width="140" height="32" rx="6" fill="#064E3B" fill-opacity="0.35" stroke="#10B981" stroke-opacity="0.25"/>
-  <text x="800" y="516" text-anchor="middle" fill="#6EE7B7" font-size="11">Citation Labels</text>
-  <text x="610" y="550" text-anchor="middle" fill="#94A3B8" font-size="10">evidence_id · citation_label [REF-X] · source_locator · score · chunk_text</text>
-
-  <line x1="998" y1="420" x2="610" y2="455" stroke="#10B981" stroke-width="1.5" marker-end="url(#arrGreen)"/>
-
-  <!-- ═══ Bottom: Strategy + Module Map ═══ -->
-  <rect x="60" y="615" width="580" height="260" rx="12" fill="#1E293B" fill-opacity="0.4" stroke="#334155"/>
-  <text x="80" y="643" fill="#F8FAFC" font-size="15" font-weight="700">混合检索策略</text>
-  <text x="80" y="673" fill="#C4B5FD" font-size="12" font-weight="600">密集向量路径</text>
-  <text x="80" y="691" fill="#94A3B8" font-size="11">文档 → OpenAI Embedding → ChromaDB 向量存储</text>
-  <text x="80" y="709" fill="#94A3B8" font-size="11">查询 → Embedding → 余弦相似度 Top-K</text>
-  <text x="80" y="739" fill="#C4B5FD" font-size="12" font-weight="600">关键词路径</text>
-  <text x="80" y="757" fill="#94A3B8" font-size="11">文档 → TF-IDF 关键词提取 → JSON 索引</text>
-  <text x="80" y="775" fill="#94A3B8" font-size="11">查询 → 关键词匹配评分</text>
-  <text x="80" y="805" fill="#C4B5FD" font-size="12" font-weight="600">重排序权重公式</text>
-  <text x="80" y="823" fill="#94A3B8" font-size="11">score = dense_sim × 1.6 + keyword_score × 0.35</text>
-  <text x="80" y="841" fill="#94A3B8" font-size="11">+ query/column/header 匹配 + 知识类型权重</text>
-  <text x="80" y="865" fill="#F59E0B" font-size="11" font-weight="600">降级: 无 embedding API → 仅关键词模式</text>
-
-  <rect x="680" y="615" width="660" height="260" rx="12" fill="#1E293B" fill-opacity="0.4" stroke="#334155"/>
-  <text x="700" y="643" fill="#F8FAFC" font-size="15" font-weight="700">模块映射 (rag/ 子包)</text>
-
-  <rect x="700" y="660" width="280" height="26" rx="5" fill="#2D1B69" fill-opacity="0.5" stroke="#8B5CF6" stroke-opacity="0.2"/>
-  <text x="710" y="678" fill="#C4B5FD" font-size="11">rag/service.py — RagService 核心服务</text>
-  <rect x="700" y="695" width="280" height="26" rx="5" fill="#2D1B69" fill-opacity="0.5" stroke="#8B5CF6" stroke-opacity="0.2"/>
-  <text x="710" y="713" fill="#C4B5FD" font-size="11">rag/models.py — 数据模型定义</text>
-  <rect x="700" y="730" width="280" height="26" rx="5" fill="#2D1B69" fill-opacity="0.5" stroke="#8B5CF6" stroke-opacity="0.2"/>
-  <text x="710" y="748" fill="#C4B5FD" font-size="11">rag/document_reader.py — 文档加载分块</text>
-  <rect x="700" y="765" width="280" height="26" rx="5" fill="#2D1B69" fill-opacity="0.5" stroke="#8B5CF6" stroke-opacity="0.2"/>
-  <text x="710" y="783" fill="#C4B5FD" font-size="11">rag/embeddings.py — 向量嵌入客户端</text>
-  <rect x="700" y="800" width="280" height="26" rx="5" fill="#2D1B69" fill-opacity="0.5" stroke="#8B5CF6" stroke-opacity="0.2"/>
-  <text x="710" y="818" fill="#C4B5FD" font-size="11">rag/vector_store.py — ChromaDB 封装</text>
-  <rect x="700" y="835" width="280" height="26" rx="5" fill="#2D1B69" fill-opacity="0.5" stroke="#8B5CF6" stroke-opacity="0.2"/>
-  <text x="710" y="853" fill="#C4B5FD" font-size="11">rag/keyword_index.py — TF-IDF 索引</text>
-
-  <rect x="1010" y="660" width="300" height="26" rx="5" fill="#2D1B69" fill-opacity="0.5" stroke="#8B5CF6" stroke-opacity="0.2"/>
-  <text x="1020" y="678" fill="#C4B5FD" font-size="11">rag/reranker.py — 混合重排序器</text>
-  <rect x="1010" y="695" width="300" height="26" rx="5" fill="#2D1B69" fill-opacity="0.5" stroke="#8B5CF6" stroke-opacity="0.2"/>
-  <text x="1020" y="713" fill="#C4B5FD" font-size="11">rag/query_builder.py — 查询构建</text>
-  <rect x="1010" y="730" width="300" height="26" rx="5" fill="#064E3B" fill-opacity="0.4" stroke="#10B981" stroke-opacity="0.2"/>
-  <text x="1020" y="748" fill="#6EE7B7" font-size="11">agent_runner.py → RagService 入口</text>
-  <rect x="1010" y="765" width="300" height="26" rx="5" fill="#064E3B" fill-opacity="0.4" stroke="#10B981" stroke-opacity="0.2"/>
-  <text x="1020" y="783" fill="#6EE7B7" font-size="11">knowledge_context.py → 上下文组装</text>
-  <rect x="1010" y="800" width="300" height="26" rx="5" fill="#064E3B" fill-opacity="0.4" stroke="#10B981" stroke-opacity="0.2"/>
-  <text x="1020" y="818" fill="#6EE7B7" font-size="11">reporting.py → 引用有效性验证</text>
-  <rect x="1010" y="835" width="300" height="26" rx="5" fill="#064E3B" fill-opacity="0.4" stroke="#10B981" stroke-opacity="0.2"/>
-  <text x="1020" y="853" fill="#6EE7B7" font-size="11">history_qa.py → 历史记录检索复用</text>
+  <rect width="1280" height="720" rx="18" fill="url(#bg)"/>
+  <text class="title" x="640" y="44" text-anchor="middle">RAG 检索子系统</text>
+  <text class="sub" x="640" y="70" text-anchor="middle">ChromaDB 向量检索 + 关键词检索 + 混合重排序 + 证据寄存</text>
+<rect x="70" y="104" width="1140" height="145" rx="14" fill="#171D37" stroke="#8B5CF6" stroke-opacity="0.45" filter="url(#shadow)"/>
+<rect x="70" y="104" width="5" height="145" rx="3" fill="#8B5CF6"/>
+<text class="section" x="88" y="133" fill="#8B5CF6">Phase 1 文档接入与索引</text>
+<text class="small" x="88" y="155" >文档分块后分别进入向量库与关键词索引</text>
+<rect x="145" y="168" width="170" height="42" rx="8" fill="#8B5CF6" fill-opacity="0.14" stroke="#8B5CF6" stroke-opacity="0.62"/>
+<text class="label" x="230.0" y="194.0" text-anchor="middle">上传文件</text>
+<line x1="315" y1="189.0" x2="350" y2="189.0" stroke="#8B5CF6" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="350" y="168" width="170" height="42" rx="8" fill="#8B5CF6" fill-opacity="0.14" stroke="#8B5CF6" stroke-opacity="0.62"/>
+<text class="label" x="435.0" y="186.0" text-anchor="middle">document_read</text>
+<text class="label" x="435.0" y="202.0" text-anchor="middle">er</text>
+<line x1="520" y1="189.0" x2="555" y2="189.0" stroke="#8B5CF6" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="555" y="168" width="170" height="42" rx="8" fill="#8B5CF6" fill-opacity="0.14" stroke="#8B5CF6" stroke-opacity="0.62"/>
+<text class="label" x="640.0" y="194.0" text-anchor="middle">embeddings</text>
+<line x1="725" y1="189.0" x2="760" y2="189.0" stroke="#8B5CF6" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="760" y="168" width="170" height="42" rx="8" fill="#8B5CF6" fill-opacity="0.14" stroke="#8B5CF6" stroke-opacity="0.62"/>
+<text class="label" x="845.0" y="194.0" text-anchor="middle">vector_store</text>
+<line x1="930" y1="189.0" x2="965" y2="189.0" stroke="#8B5CF6" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="965" y="168" width="170" height="42" rx="8" fill="#8B5CF6" fill-opacity="0.14" stroke="#8B5CF6" stroke-opacity="0.62"/>
+<text class="label" x="1050.0" y="194.0" text-anchor="middle">keyword_index</text>
+<rect x="70" y="286" width="1140" height="180" rx="14" fill="#171D37" stroke="#8B5CF6" stroke-opacity="0.45" filter="url(#shadow)"/>
+<rect x="70" y="286" width="5" height="180" rx="3" fill="#8B5CF6"/>
+<text class="section" x="88" y="315" fill="#8B5CF6">Phase 2 检索与重排序</text>
+<text class="small" x="88" y="337" >问题拆成 dense query 与 keyword query，再由 reranker 合并排序</text>
+<rect x="150" y="350" width="190" height="46" rx="8" fill="#8B5CF6" fill-opacity="0.14" stroke="#8B5CF6" stroke-opacity="0.62"/>
+<text class="label" x="245.0" y="378.0" text-anchor="middle">query_builder</text>
+<line x1="340" y1="373.0" x2="385" y2="373.0" stroke="#8B5CF6" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="385" y="350" width="190" height="46" rx="8" fill="#8B5CF6" fill-opacity="0.14" stroke="#8B5CF6" stroke-opacity="0.62"/>
+<text class="label" x="480.0" y="378.0" text-anchor="middle">dense 检索</text>
+<line x1="575" y1="373.0" x2="620" y2="373.0" stroke="#8B5CF6" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="620" y="350" width="190" height="46" rx="8" fill="#8B5CF6" fill-opacity="0.14" stroke="#8B5CF6" stroke-opacity="0.62"/>
+<text class="label" x="715.0" y="378.0" text-anchor="middle">keyword 检索</text>
+<line x1="810" y1="373.0" x2="855" y2="373.0" stroke="#8B5CF6" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="855" y="350" width="190" height="46" rx="8" fill="#8B5CF6" fill-opacity="0.14" stroke="#8B5CF6" stroke-opacity="0.62"/>
+<text class="label" x="950.0" y="378.0" text-anchor="middle">reranker</text>
+<line x1="835" y1="396" x2="638" y2="438" stroke="#10B981" stroke-width="2" marker-end="url(#arrowGreen)"/>
+<rect x="430" y="438" width="420" height="56" rx="8" fill="#10B981" fill-opacity="0.14" stroke="#10B981" stroke-opacity="0.62"/>
+<text class="label" x="640.0" y="463.0" text-anchor="middle">RagRetrievalResult</text>
+<text class="tiny" x="640.0" y="482" text-anchor="middle">RetrievedChunk[] / Evidence Register / Citation Labels</text>
+<rect x="70" y="520" width="510" height="145" rx="14" fill="#172236" stroke="#334155" stroke-opacity="0.45" filter="url(#shadow)"/>
+<rect x="70" y="520" width="5" height="145" rx="3" fill="#334155"/>
+<text class="section" x="88" y="549" fill="#334155">混合检索策略</text>
+<text class="small" x="95" y="555" >密集向量：OpenAI Embedding -&gt; ChromaDB</text>
+<text class="small" x="95" y="579" >关键词：TF-IDF JSON 索引，无 embedding 时可回退</text>
+<text class="small" x="95" y="603" >重排序：dense、keyword、query/header 匹配加权</text>
+<text class="small" x="95" y="627" >输出：证据编号与引用标签</text>
+<rect x="630" y="520" width="580" height="145" rx="14" fill="#172236" stroke="#334155" stroke-opacity="0.45" filter="url(#shadow)"/>
+<rect x="630" y="520" width="5" height="145" rx="3" fill="#334155"/>
+<text class="section" x="648" y="549" fill="#334155">模块映射</text>
+<rect x="655" y="548" width="230" height="20" rx="8" fill="#8B5CF6" fill-opacity="0.14" stroke="#8B5CF6" stroke-opacity="0.62"/>
+<text class="label" x="770.0" y="563.0" text-anchor="middle">rag/service.py</text>
+<rect x="915" y="548" width="230" height="20" rx="8" fill="#8B5CF6" fill-opacity="0.14" stroke="#8B5CF6" stroke-opacity="0.62"/>
+<text class="label" x="1030.0" y="555.0" text-anchor="middle">rag/query_builder</text>
+<text class="label" x="1030.0" y="571.0" text-anchor="middle">.py</text>
+<rect x="655" y="574" width="230" height="20" rx="8" fill="#8B5CF6" fill-opacity="0.14" stroke="#8B5CF6" stroke-opacity="0.62"/>
+<text class="label" x="770.0" y="589.0" text-anchor="middle">rag/reranker.py</text>
+<rect x="915" y="574" width="230" height="20" rx="8" fill="#8B5CF6" fill-opacity="0.14" stroke="#8B5CF6" stroke-opacity="0.62"/>
+<text class="label" x="1030.0" y="581.0" text-anchor="middle">rag/vector_store.</text>
+<text class="label" x="1030.0" y="597.0" text-anchor="middle">py</text>
+<rect x="655" y="600" width="230" height="20" rx="8" fill="#8B5CF6" fill-opacity="0.14" stroke="#8B5CF6" stroke-opacity="0.62"/>
+<text class="label" x="770.0" y="607.0" text-anchor="middle">rag/keyword_index</text>
+<text class="label" x="770.0" y="623.0" text-anchor="middle">.py</text>
+<rect x="915" y="600" width="230" height="20" rx="8" fill="#10B981" fill-opacity="0.14" stroke="#10B981" stroke-opacity="0.62"/>
+<text class="label" x="1030.0" y="607.0" text-anchor="middle">knowledge_context</text>
+<text class="label" x="1030.0" y="623.0" text-anchor="middle">.py</text>
+<rect x="655" y="626" width="230" height="20" rx="8" fill="#10B981" fill-opacity="0.14" stroke="#10B981" stroke-opacity="0.62"/>
+<text class="label" x="770.0" y="641.0" text-anchor="middle">reporting.py</text>
+<rect x="915" y="626" width="230" height="20" rx="8" fill="#10B981" fill-opacity="0.14" stroke="#10B981" stroke-opacity="0.62"/>
+<text class="label" x="1030.0" y="641.0" text-anchor="middle">history_qa.py</text>
 </svg>
