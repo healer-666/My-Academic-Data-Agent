@@ -43,31 +43,31 @@
 
 ### 1. 总体六层架构
 
-<img src="./diagrams/01_overall_architecture.svg" alt="Academic-Data-Agent 总体六层架构" width="100%">
+<img src="./diagrams/01_overall_architecture.png" alt="Academic-Data-Agent 总体六层架构" width="100%">
 
 ### 2. 主执行流水线
 
-<img src="./diagrams/02_main_pipeline.svg" alt="Academic-Data-Agent 主执行流水线" width="100%">
+<img src="./diagrams/02_main_pipeline.png" alt="Academic-Data-Agent 主执行流水线" width="100%">
 
 ### 3. Neuro-Symbolic 治理架构
 
-<img src="./diagrams/03_neuro_symbolic.svg" alt="Academic-Data-Agent Neuro-Symbolic 治理架构" width="100%">
+<img src="./diagrams/03_neuro_symbolic.png" alt="Academic-Data-Agent Neuro-Symbolic 治理架构" width="100%">
 
 ### 4. RAG 检索子系统
 
-<img src="./diagrams/04_rag_subsystem.svg" alt="Academic-Data-Agent RAG 检索子系统" width="100%">
+<img src="./diagrams/04_rag_subsystem.png" alt="Academic-Data-Agent RAG 检索子系统" width="100%">
 
 ### 5. 记忆子系统
 
-<img src="./diagrams/05_memory_subsystem.svg" alt="Academic-Data-Agent 记忆子系统" width="100%">
+<img src="./diagrams/05_memory_subsystem.png" alt="Academic-Data-Agent 记忆子系统" width="100%">
 
 ### 6. 审稿循环与质量模式
 
-<img src="./diagrams/06_review_system.svg" alt="Academic-Data-Agent 审稿循环与质量模式" width="100%">
+<img src="./diagrams/06_review_system.png" alt="Academic-Data-Agent 审稿循环与质量模式" width="100%">
 
 ### 7. 评测框架与消融实验
 
-<img src="./diagrams/07_eval_harness.svg" alt="Academic-Data-Agent 评测框架与消融实验" width="100%">
+<img src="./diagrams/07_eval_harness.png" alt="Academic-Data-Agent 评测框架与消融实验" width="100%">
 
 ### 适用场景
 
