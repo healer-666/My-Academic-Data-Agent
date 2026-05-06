@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Academic Data Agent — 架构图集</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0e1a;
+    color: #e2e8f0;
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    padding: 24px;
+  }
+  h1 {
+    text-align: center;
+    font-size: 32px;
+    color: #f8fafc;
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+  }
+  .subtitle {
+    text-align: center;
+    color: #94a3b8;
+    font-size: 14px;
+    margin-bottom: 40px;
+  }
+  .toc {
+    max-width: 800px;
+    margin: 0 auto 40px;
+    background: #1e293b;
+    border-radius: 12px;
+    padding: 24px 32px;
+    border: 1px solid #334155;
+  }
+  .toc h2 { color: #f8fafc; font-size: 18px; margin-bottom: 12px; }
+  .toc ol { padding-left: 24px; }
+  .toc li {
+    margin: 8px 0;
+    color: #93c5fd;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .toc li:hover { color: #3b82f6; text-decoration: underline; }
+  .diagram-section {
+    max-width: 1440px;
+    margin: 0 auto 48px;
+  }
+  .diagram-section h2 {
+    font-size: 20px;
+    color: #f8fafc;
+    margin-bottom: 16px;
+    padding-left: 12px;
+    border-left: 4px solid #3b82f6;
+  }
+  .diagram-section:nth-child(4) h2 { border-color: #8b5cf6; }
+  .diagram-section:nth-child(5) h2 { border-color: #f59e0b; }
+  .diagram-section:nth-child(6) h2 { border-color: #10b981; }
+  .diagram-section:nth-child(7) h2 { border-color: #ef4444; }
+  .diagram-section:nth-child(8) h2 { border-color: #06b6d4; }
+  .diagram-section:nth-child(9) h2 { border-color: #8b5cf6; }
+  .diagram-section:nth-child(10) h2 { border-color: #ef4444; }
+  .diagram-frame {
+    width: 100%;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid #334155;
+    background: #0f172a;
+  }
+  .diagram-frame object {
+    width: 100%;
+    display: block;
+  }
+  .nav-top {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 48px;
+    height: 48px;
+    font-size: 20px;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(59,130,246,0.4);
+    z-index: 100;
+  }
+  .nav-top:hover { background: #2563eb; }
+</style>
+</head>
+<body>
+
+<h1>Academic Data Agent — 架构图集</h1>
+<p class="subtitle">7 张 PPT 演示图 · 可直接截图或嵌入 PPT · SVG 格式支持无损缩放</p>
+
+<div class="toc">
+  <h2>目录</h2>
+  <ol>
+    <li onclick="document.getElementById('d1').scrollIntoView({behavior:'smooth'})">总体六层架构</li>
+    <li onclick="document.getElementById('d2').scrollIntoView({behavior:'smooth'})">主执行流水线 (10 阶段)</li>
+    <li onclick="document.getElementById('d3').scrollIntoView({behavior:'smooth'})">Neuro-Symbolic 治理架构</li>
+    <li onclick="document.getElementById('d4').scrollIntoView({behavior:'smooth'})">RAG 检索子系统</li>
+    <li onclick="document.getElementById('d5').scrollIntoView({behavior:'smooth'})">记忆子系统 (分层沉淀)</li>
+    <li onclick="document.getElementById('d6').scrollIntoView({behavior:'smooth'})">审稿循环与质量模式</li>
+    <li onclick="document.getElementById('d7').scrollIntoView({behavior:'smooth'})">评测框架与消融实验</li>
+  </ol>
+</div>
+
+<div class="diagram-section" id="d1">
+  <h2>1. 总体六层架构</h2>
+  <div class="diagram-frame">
+    <object type="image/svg+xml" data="01_overall_architecture.svg" style="height:680px;"></object>
+  </div>
+</div>
+
+<div class="diagram-section" id="d2">
+  <h2>2. 主执行流水线 (10 阶段)</h2>
+  <div class="diagram-frame">
+    <object type="image/svg+xml" data="02_main_pipeline.svg" style="height:720px;"></object>
+  </div>
+</div>
+
+<div class="diagram-section" id="d3">
+  <h2>3. Neuro-Symbolic 治理架构</h2>
+  <div class="diagram-frame">
+    <object type="image/svg+xml" data="03_neuro_symbolic.svg" style="height:680px;"></object>
+  </div>
+</div>
+
+<div class="diagram-section" id="d4">
+  <h2>4. RAG 检索子系统</h2>
+  <div class="diagram-frame">
+    <object type="image/svg+xml" data="04_rag_subsystem.svg" style="height:680px;"></object>
+  </div>
+</div>
+
+<div class="diagram-section" id="d5">
+  <h2>5. 记忆子系统 (分层沉淀)</h2>
+  <div class="diagram-frame">
+    <object type="image/svg+xml" data="05_memory_subsystem.svg" style="height:680px;"></object>
+  </div>
+</div>
+
+<div class="diagram-section" id="d6">
+  <h2>6. 审稿循环与质量模式</h2>
+  <div class="diagram-frame">
+    <object type="image/svg+xml" data="06_review_system.svg" style="height:680px;"></object>
+  </div>
+</div>
+
+<div class="diagram-section" id="d7">
+  <h2>7. 评测框架与消融实验</h2>
+  <div class="diagram-frame">
+    <object type="image/svg+xml" data="07_eval_harness.svg" style="height:680px;"></object>
+  </div>
+</div>
+
+<button class="nav-top" onclick="window.scrollTo({top:0,behavior:'smooth'})" title="回到顶部">↑</button>
+
+</body>
+</html>

@@ -6,7 +6,7 @@
 [![Python Version](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](#)
 
-[特点](#-核心特点) · [架构](#-系统架构) · [快速开始](#-快速开始) · [使用指南](#-使用指南) · [项目结构](#-项目结构)
+[特点](#-核心特点) · [图览](#-架构图览) · [架构](#-系统架构) · [快速开始](#-快速开始) · [使用指南](#-使用指南) · [项目结构](#-项目结构)
 </div>
 
 ## 项目简介
@@ -36,6 +36,38 @@
 - Gradio 工作台、历史回放与工件下载
 - eval harness：固定 10 个自造表格任务，当前 `seed_v5` 稳定基线为 `10/10 accepted`
 - symbolic ablation：支持 `full`、`prompt_only`、`none` 三组 profile，对比符号化规则和验证反馈对流程合规性、报告完整性和可复现性的影响
+
+## 架构图览
+
+以下 SVG 图均位于 [`diagrams/`](./diagrams/) 目录，可在 GitHub README 中直接缩放查看，也可以通过 [`diagrams/viewer.html`](./diagrams/viewer.html) 本地浏览整套图集。
+
+### 1. 总体六层架构
+
+<img src="./diagrams/01_overall_architecture.svg" alt="Academic-Data-Agent 总体六层架构" width="100%">
+
+### 2. 主执行流水线
+
+<img src="./diagrams/02_main_pipeline.svg" alt="Academic-Data-Agent 主执行流水线" width="100%">
+
+### 3. Neuro-Symbolic 治理架构
+
+<img src="./diagrams/03_neuro_symbolic.svg" alt="Academic-Data-Agent Neuro-Symbolic 治理架构" width="100%">
+
+### 4. RAG 检索子系统
+
+<img src="./diagrams/04_rag_subsystem.svg" alt="Academic-Data-Agent RAG 检索子系统" width="100%">
+
+### 5. 记忆子系统
+
+<img src="./diagrams/05_memory_subsystem.svg" alt="Academic-Data-Agent 记忆子系统" width="100%">
+
+### 6. 审稿循环与质量模式
+
+<img src="./diagrams/06_review_system.svg" alt="Academic-Data-Agent 审稿循环与质量模式" width="100%">
+
+### 7. 评测框架与消融实验
+
+<img src="./diagrams/07_eval_harness.svg" alt="Academic-Data-Agent 评测框架与消融实验" width="100%">
 
 ### 适用场景
 

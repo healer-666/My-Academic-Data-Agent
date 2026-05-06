@@ -1,0 +1,152 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 900" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0F172A"/>
+      <stop offset="100%" stop-color="#1E293B"/>
+    </linearGradient>
+    <marker id="arrRed" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="7" markerHeight="5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#EF4444"/>
+    </marker>
+    <marker id="arrGreen" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="7" markerHeight="5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#10B981"/>
+    </marker>
+    <marker id="arrGray" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="7" markerHeight="5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#94A3B8"/>
+    </marker>
+    <marker id="arrPurple" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="7" markerHeight="5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#8B5CF6"/>
+    </marker>
+  </defs>
+
+  <rect width="1400" height="900" fill="url(#bgGrad)" rx="16"/>
+
+  <!-- Title -->
+  <text x="700" y="48" text-anchor="middle" fill="#F8FAFC" font-size="28" font-weight="700">审稿循环与质量模式</text>
+  <text x="700" y="72" text-anchor="middle" fill="#94A3B8" font-size="13">程序化检查门 + 独立审稿人 + 修订循环 + 可选视觉审稿</text>
+
+  <!-- ═══ Pre-review Gates ═══ -->
+  <rect x="60" y="100" width="1280" height="130" rx="12" fill="#064E3B" fill-opacity="0.15" stroke="#10B981" stroke-opacity="0.3"/>
+  <text x="80" y="128" fill="#10B981" font-size="16" font-weight="700">前置检查门 (程序化阻断)</text>
+  <text x="80" y="148" fill="#94A3B8" font-size="11">报告进入审稿人之前，先通过两道程序化检查</text>
+
+  <!-- Gate 1 -->
+  <rect x="85" y="160" width="560" height="55" rx="8" fill="#064E3B" fill-opacity="0.3" stroke="#10B981" stroke-opacity="0.3"/>
+  <text x="105" y="183" fill="#6EE7B7" font-size="13" font-weight="600">Gate 1: 执行审计 (execution_audit)</text>
+  <text x="105" y="202" fill="#94A3B8" font-size="11">AST 分析 Python 步骤 → 验证两阶段数据协议 (save → reload) → 不通过则自动拒绝</text>
+
+  <!-- Gate 2 -->
+  <rect x="685" y="160" width="630" height="55" rx="8" fill="#064E3B" fill-opacity="0.3" stroke="#10B981" stroke-opacity="0.3"/>
+  <text x="705" y="183" fill="#6EE7B7" font-size="13" font-weight="600">Gate 2: 报告契约 (report_contract)</text>
+  <text x="705" y="202" fill="#94A3B8" font-size="11">7个必需章节 + 图表解读 + 效应量/CI + 因果语言 + 引用 → 不通过则附 revision_brief</text>
+
+  <!-- Gate flow arrow -->
+  <path d="M645,187 L685,187" stroke="#10B981" stroke-width="1.5" marker-end="url(#arrGreen)"/>
+
+  <!-- ═══ Review Loop ═══ -->
+  <rect x="60" y="255" width="1280" height="250" rx="12" fill="#450A0A" fill-opacity="0.15" stroke="#EF4444" stroke-opacity="0.3"/>
+  <text x="80" y="283" fill="#EF4444" font-size="16" font-weight="700">审稿循环 (Review Loop)</text>
+
+  <!-- Analyst submits -->
+  <rect x="85" y="300" width="180" height="55" rx="8" fill="#1E3A5F" stroke="#3B82F6" stroke-opacity="0.4"/>
+  <text x="175" y="322" text-anchor="middle" fill="#93C5FD" font-size="12" font-weight="600">分析员提交</text>
+  <text x="175" y="340" text-anchor="middle" fill="#64748B" font-size="10">报告 + 图表 + 遥测</text>
+
+  <!-- Reviewer task assembly -->
+  <rect x="310" y="295" width="200" height="65" rx="8" fill="#450A0A" fill-opacity="0.4" stroke="#EF4444" stroke-opacity="0.3"/>
+  <text x="410" y="318" text-anchor="middle" fill="#FCA5A5" font-size="12" font-weight="600">build_reviewer_task()</text>
+  <text x="410" y="335" text-anchor="middle" fill="#F87171" font-size="10">数据上下文 + 步骤追踪</text>
+  <text x="410" y="350" text-anchor="middle" fill="#F87171" font-size="10">+ 审计结果 + 证据 + 记忆</text>
+
+  <!-- Reviewer LLM -->
+  <rect x="560" y="290" width="200" height="75" rx="8" fill="#450A0A" stroke="#EF4444" stroke-opacity="0.5"/>
+  <text x="660" y="315" text-anchor="middle" fill="#FCA5A5" font-size="13" font-weight="600">审稿人 LLM</text>
+  <text x="660" y="333" text-anchor="middle" fill="#F87171" font-size="10">build_reviewer_prompt()</text>
+  <text x="660" y="348" text-anchor="middle" fill="#F87171" font-size="10">标准/出版物清单</text>
+  <text x="660" y="362" text-anchor="middle" fill="#F87171" font-size="10">parse_reviewer_reply()</text>
+
+  <!-- Decision diamond -->
+  <polygon points="860,327 910,300 960,327 910,354" fill="#450A0A" stroke="#EF4444" stroke-opacity="0.5"/>
+  <text x="910" y="332" text-anchor="middle" fill="#FCA5A5" font-size="11" font-weight="600">Accept?</text>
+
+  <!-- Accept path -->
+  <rect x="1010" y="310" width="160" height="35" rx="8" fill="#064E3B" stroke="#10B981" stroke-opacity="0.5"/>
+  <text x="1090" y="333" text-anchor="middle" fill="#6EE7B7" font-size="12" font-weight="600">ACCEPT → 继续</text>
+
+  <!-- Reject path -->
+  <rect x="830" y="390" width="220" height="55" rx="8" fill="#450A0A" fill-opacity="0.5" stroke="#EF4444" stroke-opacity="0.4"/>
+  <text x="940" y="413" text-anchor="middle" fill="#FCA5A5" font-size="12" font-weight="600">REJECT → build_revision_brief()</text>
+  <text x="940" y="433" text-anchor="middle" fill="#F87171" font-size="10">修订要点 → 分析员重新分析</text>
+
+  <!-- Revision loop arrow -->
+  <path d="M830,418 L265,327" stroke="#EF4444" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrRed)"/>
+  <text x="500" y="385" fill="#F87171" font-size="10">修订循环</text>
+
+  <!-- Visual Review -->
+  <rect x="830" y="465" width="460" height="30" rx="6" fill="#2D1B69" fill-opacity="0.3" stroke="#8B5CF6" stroke-opacity="0.3"/>
+  <text x="1060" y="485" text-anchor="middle" fill="#C4B5FD" font-size="11">可选: 视觉审稿 (vision_review) — publication 且视觉模型已配置时启用</text>
+
+  <path d="M940,445 L1060,465" stroke="#8B5CF6" stroke-width="1" stroke-dasharray="3,2"/>
+
+  <!-- Arrows in review loop -->
+  <path d="M265,327 L310,327" stroke="#94A3B8" stroke-width="1.5" marker-end="url(#arrGray)"/>
+  <path d="M510,327 L560,327" stroke="#94A3B8" stroke-width="1.5" marker-end="url(#arrGray)"/>
+  <path d="M760,327 L860,327" stroke="#94A3B8" stroke-width="1.5" marker-end="url(#arrGray)"/>
+  <path d="M960,327 L1010,327" stroke="#10B981" stroke-width="1.5" marker-end="url(#arrGreen)"/>
+
+  <!-- ═══ Quality Modes ═══ -->
+  <rect x="60" y="530" width="1280" height="180" rx="12" fill="#1E293B" fill-opacity="0.5" stroke="#334155"/>
+  <text x="80" y="558" fill="#F8FAFC" font-size="16" font-weight="700">质量模式配置</text>
+
+  <!-- Draft -->
+  <rect x="85" y="575" width="370" height="115" rx="10" fill="#6B7280" fill-opacity="0.15" stroke="#6B7280" stroke-opacity="0.4"/>
+  <text x="270" y="600" text-anchor="middle" fill="#D1D5DB" font-size="14" font-weight="700">draft (草稿)</text>
+  <text x="270" y="622" text-anchor="middle" fill="#9CA3AF" font-size="11">审稿轮数: 0 (跳过审稿)</text>
+  <text x="270" y="642" text-anchor="middle" fill="#9CA3AF" font-size="11">视觉审稿: 关闭</text>
+  <text x="270" y="662" text-anchor="middle" fill="#9CA3AF" font-size="11">适用: 快速探索、数据预览</text>
+  <text x="270" y="680" text-anchor="middle" fill="#6B7280" font-size="10">跳过 reviewer, 仍保留工件校验</text>
+
+  <!-- Standard -->
+  <rect x="485" y="575" width="370" height="115" rx="10" fill="#3B82F6" fill-opacity="0.15" stroke="#3B82F6" stroke-opacity="0.4"/>
+  <text x="670" y="600" text-anchor="middle" fill="#93C5FD" font-size="14" font-weight="700">standard (标准)</text>
+  <text x="670" y="622" text-anchor="middle" fill="#94A3B8" font-size="11">审稿轮数: 1 轮</text>
+  <text x="670" y="642" text-anchor="middle" fill="#94A3B8" font-size="11">视觉审稿: 关闭</text>
+  <text x="670" y="662" text-anchor="middle" fill="#94A3B8" font-size="11">适用: 日常分析、教学使用</text>
+  <text x="670" y="680" text-anchor="middle" fill="#64748B" font-size="10">审稿不通过 → 最多修订 1 次</text>
+
+  <!-- Publication -->
+  <rect x="885" y="575" width="430" height="115" rx="10" fill="#F59E0B" fill-opacity="0.15" stroke="#F59E0B" stroke-opacity="0.4"/>
+  <text x="1100" y="600" text-anchor="middle" fill="#FCD34D" font-size="14" font-weight="700">publication (出版级)</text>
+  <text x="1100" y="622" text-anchor="middle" fill="#D97706" font-size="11">审稿轮数: 2 轮</text>
+  <text x="1100" y="642" text-anchor="middle" fill="#D97706" font-size="11">视觉审稿: auto 且配置完成时启用</text>
+  <text x="1100" y="662" text-anchor="middle" fill="#D97706" font-size="11">适用: 论文投稿、正式报告</text>
+  <text x="1100" y="680" text-anchor="middle" fill="#B45309" font-size="10">2轮审稿 + 图表质量视觉审核</text>
+
+  <!-- ═══ Vision Review Detail ═══ -->
+  <rect x="60" y="735" width="1280" height="140" rx="12" fill="#2D1B69" fill-opacity="0.15" stroke="#8B5CF6" stroke-opacity="0.3"/>
+  <text x="80" y="763" fill="#8B5CF6" font-size="16" font-weight="700">视觉审稿流程 (Vision Review)</text>
+
+  <rect x="85" y="780" width="250" height="70" rx="8" fill="#2D1B69" fill-opacity="0.4" stroke="#8B5CF6" stroke-opacity="0.3"/>
+  <text x="210" y="803" text-anchor="middle" fill="#C4B5FD" font-size="11" font-weight="600">select_visual_review_candidates()</text>
+  <text x="210" y="820" text-anchor="middle" fill="#A78BFA" font-size="10">按审稿轮次筛选候选图表</text>
+  <text x="210" y="836" text-anchor="middle" fill="#A78BFA" font-size="10">优先: 新生成 / 被引用的图表</text>
+
+  <rect x="370" y="780" width="250" height="70" rx="8" fill="#2D1B69" fill-opacity="0.4" stroke="#8B5CF6" stroke-opacity="0.3"/>
+  <text x="495" y="803" text-anchor="middle" fill="#C4B5FD" font-size="11" font-weight="600">prepare_image_for_vision()</text>
+  <text x="495" y="820" text-anchor="middle" fill="#A78BFA" font-size="10">resize → JPEG → base64 编码</text>
+  <text x="495" y="836" text-anchor="middle" fill="#A78BFA" font-size="10">适配视觉模型输入格式</text>
+
+  <rect x="660" y="780" width="250" height="70" rx="8" fill="#2D1B69" fill-opacity="0.4" stroke="#8B5CF6" stroke-opacity="0.3"/>
+  <text x="785" y="803" text-anchor="middle" fill="#C4B5FD" font-size="11" font-weight="600">Vision LLM 审核</text>
+  <text x="785" y="820" text-anchor="middle" fill="#A78BFA" font-size="10">检查: 标签可读性 · 坐标轴</text>
+  <text x="785" y="836" text-anchor="middle" fill="#A78BFA" font-size="10">· 颜色对比 · 图例清晰</text>
+
+  <rect x="950" y="780" width="250" height="70" rx="8" fill="#2D1B69" fill-opacity="0.4" stroke="#8B5CF6" stroke-opacity="0.3"/>
+  <text x="1075" y="803" text-anchor="middle" fill="#C4B5FD" font-size="11" font-weight="600">VisualReviewResult</text>
+  <text x="1075" y="820" text-anchor="middle" fill="#A78BFA" font-size="10">findings[]: 问题列表</text>
+  <text x="1075" y="836" text-anchor="middle" fill="#A78BFA" font-size="10">severity: critical / warning / info</text>
+
+  <!-- Vision review flow arrows -->
+  <path d="M335,815 L370,815" stroke="#8B5CF6" stroke-width="1.5" marker-end="url(#arrPurple)"/>
+  <path d="M620,815 L660,815" stroke="#8B5CF6" stroke-width="1.5" marker-end="url(#arrPurple)"/>
+  <path d="M910,815 L950,815" stroke="#8B5CF6" stroke-width="1.5" marker-end="url(#arrPurple)"/>
+</svg>

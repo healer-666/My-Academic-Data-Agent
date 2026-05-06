@@ -1,0 +1,165 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 900" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0F172A"/>
+      <stop offset="100%" stop-color="#1E293B"/>
+    </linearGradient>
+    <marker id="arrPurple" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="7" markerHeight="5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#8B5CF6"/>
+    </marker>
+    <marker id="arrGreen" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="7" markerHeight="5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#10B981"/>
+    </marker>
+    <marker id="arrRed" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="7" markerHeight="5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#EF4444"/>
+    </marker>
+    <marker id="arrGray" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="7" markerHeight="5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#94A3B8"/>
+    </marker>
+  </defs>
+
+  <rect width="1400" height="900" fill="url(#bgGrad)" rx="16"/>
+
+  <!-- Title -->
+  <text x="700" y="48" text-anchor="middle" fill="#F8FAFC" font-size="28" font-weight="700">记忆子系统架构</text>
+  <text x="700" y="72" text-anchor="middle" fill="#94A3B8" font-size="13">分层沉淀: 成功经验 · 失败教训 · 外部知识 (RAG)</text>
+
+  <!-- ═══ Three Memory Layers ═══ -->
+  <!-- Layer 1: Success Memory -->
+  <rect x="60" y="100" width="400" height="320" rx="14" fill="#064E3B" fill-opacity="0.2" stroke="#10B981" stroke-opacity="0.4"/>
+  <text x="260" y="130" text-anchor="middle" fill="#10B981" font-size="16" font-weight="700">成功经验记忆</text>
+  <text x="260" y="150" text-anchor="middle" fill="#6EE7B7" font-size="11">SuccessMemoryService</text>
+
+  <rect x="85" y="170" width="350" height="50" rx="8" fill="#064E3B" fill-opacity="0.4" stroke="#10B981" stroke-opacity="0.3"/>
+  <text x="260" y="190" text-anchor="middle" fill="#A7F3D0" font-size="12" font-weight="600">写入流程</text>
+  <text x="260" y="206" text-anchor="middle" fill="#6EE7B7" font-size="9">accepted run → extract_memory_records()</text>
+  <text x="260" y="218" text-anchor="middle" fill="#6EE7B7" font-size="9">规则提取 + 可选 LLM 蒸馏 → ChromaDB</text>
+
+  <rect x="85" y="230" width="350" height="50" rx="8" fill="#064E3B" fill-opacity="0.4" stroke="#10B981" stroke-opacity="0.3"/>
+  <text x="260" y="250" text-anchor="middle" fill="#A7F3D0" font-size="12" font-weight="600">读取流程</text>
+  <text x="260" y="266" text-anchor="middle" fill="#6EE7B7" font-size="9">新任务 → 向量相似度检索 → Top-K 经验记录</text>
+  <text x="260" y="278" text-anchor="middle" fill="#6EE7B7" font-size="9">format_for_prompt() → 注入 prompt context</text>
+
+  <rect x="85" y="290" width="350" height="55" rx="8" fill="#064E3B" fill-opacity="0.4" stroke="#10B981" stroke-opacity="0.3"/>
+  <text x="260" y="309" text-anchor="middle" fill="#A7F3D0" font-size="12" font-weight="600">数据模型</text>
+  <text x="260" y="325" text-anchor="middle" fill="#6EE7B7" font-size="9">MemoryRecord: memory_type · run_id</text>
+  <text x="260" y="337" text-anchor="middle" fill="#6EE7B7" font-size="9">detected_domain · review_status · scope_key</text>
+
+  <rect x="85" y="350" width="350" height="50" rx="8" fill="#064E3B" fill-opacity="0.2" stroke="#10B981" stroke-opacity="0.2"/>
+  <text x="260" y="373" text-anchor="middle" fill="#94A3B8" font-size="11" font-style="italic">作用: 指导分析方法选择</text>
+  <text x="260" y="390" text-anchor="middle" fill="#94A3B8" font-size="11" font-style="italic">复用已通过审稿的分析偏好与约束</text>
+
+  <!-- Layer 2: Failure Memory -->
+  <rect x="500" y="100" width="400" height="320" rx="14" fill="#450A0A" fill-opacity="0.2" stroke="#EF4444" stroke-opacity="0.4"/>
+  <text x="700" y="130" text-anchor="middle" fill="#EF4444" font-size="16" font-weight="700">失败教训记忆</text>
+  <text x="700" y="150" text-anchor="middle" fill="#FCA5A5" font-size="11">FailureMemoryService</text>
+
+  <rect x="525" y="170" width="350" height="50" rx="8" fill="#450A0A" fill-opacity="0.4" stroke="#EF4444" stroke-opacity="0.3"/>
+  <text x="700" y="190" text-anchor="middle" fill="#FECACA" font-size="12" font-weight="600">写入流程</text>
+  <text x="700" y="206" text-anchor="middle" fill="#FCA5A5" font-size="9">failed run → extract_failure_memory_records()</text>
+  <text x="700" y="218" text-anchor="middle" fill="#FCA5A5" font-size="9">失败模式 + avoidance_rule → ChromaDB</text>
+
+  <rect x="525" y="230" width="350" height="50" rx="8" fill="#450A0A" fill-opacity="0.4" stroke="#EF4444" stroke-opacity="0.3"/>
+  <text x="700" y="250" text-anchor="middle" fill="#FECACA" font-size="12" font-weight="600">读取流程</text>
+  <text x="700" y="266" text-anchor="middle" fill="#FCA5A5" font-size="9">新任务 → 向量相似度检索 → 负向约束记录</text>
+  <text x="700" y="278" text-anchor="middle" fill="#FCA5A5" font-size="9">format_for_prompt() → 注入为 AVOID 清单</text>
+
+  <rect x="525" y="290" width="350" height="55" rx="8" fill="#450A0A" fill-opacity="0.4" stroke="#EF4444" stroke-opacity="0.3"/>
+  <text x="700" y="309" text-anchor="middle" fill="#FECACA" font-size="12" font-weight="600">数据模型</text>
+  <text x="700" y="325" text-anchor="middle" fill="#FCA5A5" font-size="9">FailureMemoryRecord: failure_type · trigger_stage</text>
+  <text x="700" y="337" text-anchor="middle" fill="#FCA5A5" font-size="9">audit_status · avoidance_rule · scope_key</text>
+
+  <rect x="525" y="350" width="350" height="50" rx="8" fill="#450A0A" fill-opacity="0.2" stroke="#EF4444" stroke-opacity="0.2"/>
+  <text x="700" y="373" text-anchor="middle" fill="#94A3B8" font-size="11" font-style="italic">作用: 避免重复犯错</text>
+  <text x="700" y="390" text-anchor="middle" fill="#94A3B8" font-size="11" font-style="italic">把失败转成后续分析的负向约束</text>
+
+  <!-- Layer 3: External Knowledge (RAG) -->
+  <rect x="940" y="100" width="400" height="320" rx="14" fill="#2D1B69" fill-opacity="0.2" stroke="#8B5CF6" stroke-opacity="0.4"/>
+  <text x="1140" y="130" text-anchor="middle" fill="#8B5CF6" font-size="16" font-weight="700">外部知识记忆</text>
+  <text x="1140" y="150" text-anchor="middle" fill="#C4B5FD" font-size="11">RAG Service (ChromaDB)</text>
+
+  <rect x="965" y="170" width="350" height="50" rx="8" fill="#2D1B69" fill-opacity="0.4" stroke="#8B5CF6" stroke-opacity="0.3"/>
+  <text x="1140" y="193" text-anchor="middle" fill="#DDD6FE" font-size="12" font-weight="600">索引流程</text>
+  <text x="1140" y="210" text-anchor="middle" fill="#C4B5FD" font-size="10">上传文件 → document_reader → 向量 + 关键词双索引</text>
+
+  <rect x="965" y="230" width="350" height="50" rx="8" fill="#2D1B69" fill-opacity="0.4" stroke="#8B5CF6" stroke-opacity="0.3"/>
+  <text x="1140" y="253" text-anchor="middle" fill="#DDD6FE" font-size="12" font-weight="600">检索流程</text>
+  <text x="1140" y="270" text-anchor="middle" fill="#C4B5FD" font-size="10">data_context → query_builder → 混合检索 → reranker → 证据寄存</text>
+
+  <rect x="965" y="290" width="350" height="50" rx="8" fill="#2D1B69" fill-opacity="0.4" stroke="#8B5CF6" stroke-opacity="0.3"/>
+  <text x="1140" y="313" text-anchor="middle" fill="#DDD6FE" font-size="12" font-weight="600">数据模型</text>
+  <text x="1140" y="330" text-anchor="middle" fill="#C4B5FD" font-size="10">RetrievedChunk: evidence_id · citation_label [REF-X]</text>
+  <text x="1140" y="345" text-anchor="middle" fill="#C4B5FD" font-size="10">source_locator · score · chunk_text</text>
+
+  <rect x="965" y="350" width="350" height="50" rx="8" fill="#2D1B69" fill-opacity="0.2" stroke="#8B5CF6" stroke-opacity="0.2"/>
+  <text x="1140" y="373" text-anchor="middle" fill="#94A3B8" font-size="11" font-style="italic">作用: 领域知识支撑</text>
+  <text x="1140" y="390" text-anchor="middle" fill="#94A3B8" font-size="11" font-style="italic">"参考指南建议用 Kruskal-Wallis [REF-1]"</text>
+
+  <!-- ═══ Assembly: KnowledgeContextProvider ═══ -->
+  <rect x="60" y="450" width="1280" height="120" rx="14" fill="#1E3A5F" fill-opacity="0.3" stroke="#3B82F6" stroke-opacity="0.4"/>
+  <text x="700" y="480" text-anchor="middle" fill="#3B82F6" font-size="16" font-weight="700">知识上下文组装 — KnowledgeContextProvider.collect()</text>
+
+  <rect x="85" y="498" width="230" height="55" rx="8" fill="#1E3A5F" stroke="#10B981" stroke-opacity="0.3"/>
+  <text x="200" y="520" text-anchor="middle" fill="#6EE7B7" font-size="11">成功经验 (Success Memory)</text>
+  <text x="200" y="538" text-anchor="middle" fill="#94A3B8" font-size="10">"推荐方法: ..."</text>
+
+  <rect x="340" y="498" width="230" height="55" rx="8" fill="#1E3A5F" stroke="#EF4444" stroke-opacity="0.3"/>
+  <text x="455" y="520" text-anchor="middle" fill="#FCA5A5" font-size="11">失败教训 (Failure Memory)</text>
+  <text x="455" y="538" text-anchor="middle" fill="#94A3B8" font-size="10">"避免: ..."</text>
+
+  <rect x="600" y="498" width="230" height="55" rx="8" fill="#1E3A5F" stroke="#8B5CF6" stroke-opacity="0.3"/>
+  <text x="715" y="520" text-anchor="middle" fill="#C4B5FD" font-size="11">RAG 引用 (Retrieved Chunks)</text>
+  <text x="715" y="538" text-anchor="middle" fill="#94A3B8" font-size="10">"[REF-1] ... [REF-2] ..."</text>
+
+  <rect x="860" y="498" width="210" height="55" rx="8" fill="#1E3A5F" stroke="#3B82F6" stroke-opacity="0.3"/>
+  <text x="965" y="520" text-anchor="middle" fill="#93C5FD" font-size="11">用户意图 (User Query)</text>
+  <text x="965" y="538" text-anchor="middle" fill="#94A3B8" font-size="10">原始分析请求</text>
+
+  <rect x="1100" y="498" width="210" height="55" rx="8" fill="#1E3A5F" stroke="#F59E0B" stroke-opacity="0.3"/>
+  <text x="1205" y="520" text-anchor="middle" fill="#FCD34D" font-size="11">证据寄存 (Evidence)</text>
+  <text x="1205" y="538" text-anchor="middle" fill="#94A3B8" font-size="10">Citation Label 映射表</text>
+
+  <!-- Arrows to assembly — color-matched to source -->
+  <path d="M260,420 L200,450" stroke="#10B981" stroke-width="1.5" marker-end="url(#arrGreen)"/>
+  <path d="M700,420 L455,450" stroke="#EF4444" stroke-width="1.5" marker-end="url(#arrRed)"/>
+  <path d="M1140,420 L715,450" stroke="#8B5CF6" stroke-width="1.5" marker-end="url(#arrPurple)"/>
+
+  <!-- ═══ Output to ReAct ═══ -->
+  <rect x="60" y="600" width="1280" height="80" rx="14" fill="#422006" fill-opacity="0.2" stroke="#F59E0B" stroke-opacity="0.3"/>
+  <text x="700" y="630" text-anchor="middle" fill="#F59E0B" font-size="14" font-weight="700">→ 注入 build_system_prompt() → ReAct 循环上下文</text>
+  <text x="700" y="655" text-anchor="middle" fill="#D97706" font-size="11">分层上下文注入 prompt: 成功经验可复用, 失败教训作禁忌, 外部知识必须引用证据标签</text>
+
+  <!-- ═══ Scope Isolation ═══ -->
+  <rect x="60" y="710" width="580" height="160" rx="12" fill="#1E293B" fill-opacity="0.5" stroke="#334155"/>
+  <text x="80" y="738" fill="#F8FAFC" font-size="15" font-weight="700">作用域隔离 (Scope)</text>
+  <text x="80" y="765" fill="#94A3B8" font-size="12">derive_memory_scope_key() 实现项目级记忆隔离:</text>
+  <text x="80" y="790" fill="#C4B5FD" font-size="11">• 显式作用域 → 用户指定的 scope 标签</text>
+  <text x="80" y="812" fill="#C4B5FD" font-size="11">• 会话作用域 → 当前运行的 session ID</text>
+  <text x="80" y="834" fill="#C4B5FD" font-size="11">• 文件名作用域 → 数据文件名 stem 归一化</text>
+  <text x="80" y="856" fill="#94A3B8" font-size="10">确保不同项目/数据集之间的记忆互不干扰</text>
+
+  <!-- ═══ Storage Backend ═══ -->
+  <rect x="680" y="710" width="660" height="160" rx="12" fill="#1E293B" fill-opacity="0.5" stroke="#334155"/>
+  <text x="700" y="738" fill="#F8FAFC" font-size="15" font-weight="700">存储后端</text>
+
+  <rect x="700" y="755" width="280" height="28" rx="5" fill="#2D1B69" fill-opacity="0.5" stroke="#8B5CF6" stroke-opacity="0.2"/>
+  <text x="710" y="774" fill="#C4B5FD" font-size="11">ChromaDB PersistentClient (向量检索)</text>
+
+  <rect x="700" y="790" width="280" height="28" rx="5" fill="#2D1B69" fill-opacity="0.5" stroke="#8B5CF6" stroke-opacity="0.2"/>
+  <text x="710" y="809" fill="#C4B5FD" font-size="11">memory/project_memory/ 与 failure_memory/</text>
+
+  <rect x="700" y="825" width="280" height="28" rx="5" fill="#2D1B69" fill-opacity="0.5" stroke="#8B5CF6" stroke-opacity="0.2"/>
+  <text x="710" y="844" fill="#C4B5FD" font-size="11">Embedding-based 相似度检索</text>
+
+  <rect x="1010" y="755" width="300" height="28" rx="5" fill="#064E3B" fill-opacity="0.5" stroke="#10B981" stroke-opacity="0.2"/>
+  <text x="1020" y="774" fill="#6EE7B7" font-size="11">memory/service.py — 服务层</text>
+
+  <rect x="1010" y="790" width="300" height="28" rx="5" fill="#064E3B" fill-opacity="0.5" stroke="#10B981" stroke-opacity="0.2"/>
+  <text x="1020" y="809" fill="#6EE7B7" font-size="11">memory/extractor.py — 记录提取</text>
+
+  <rect x="1010" y="825" width="300" height="28" rx="5" fill="#064E3B" fill-opacity="0.5" stroke="#10B981" stroke-opacity="0.2"/>
+  <text x="1020" y="844" fill="#6EE7B7" font-size="11">memory/models.py — 数据模型</text>
+
+  <rect x="1010" y="860" width="300" height="28" rx="5" fill="#064E3B" fill-opacity="0.5" stroke="#10B981" stroke-opacity="0.2"/>
+  <text x="1020" y="879" fill="#6EE7B7" font-size="11">memory/scope.py — 作用域管理</text>
+</svg>
