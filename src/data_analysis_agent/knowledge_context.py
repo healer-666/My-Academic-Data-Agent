@@ -1,4 +1,4 @@
-"""Lightweight knowledge-context assembly without full RAG infrastructure."""
+"""Knowledge-context assembly for prompt-time memory and RAG injection."""
 
 from __future__ import annotations
 
@@ -88,6 +88,20 @@ class KnowledgeContextProvider:
         reference_paths: Iterable[str | Path] = (),
         retrieved_chunks: Iterable[RetrievedChunk] = (),
     ) -> KnowledgeContextBundle:
+        reference_chunks = self._read_reference_contexts(reference_paths)
+        sorted_chunks = self._sort_retrieved_chunks(retrieved_chunks)
+
+        return KnowledgeContextBundle(
+            background_context=data_context.background_literature_context,
+            user_context=str(user_query or "").strip(),
+            success_memory_context=str(success_memory_context or "").strip(),
+            failure_memory_context=str(failure_memory_context or "").strip(),
+            reference_context="\n".join(reference_chunks).strip(),
+            retrieved_context=self._format_retrieved_context(sorted_chunks),
+            retrieved_evidence_register=self._format_evidence_register(sorted_chunks),
+        )
+
+    def _read_reference_contexts(self, reference_paths: Iterable[str | Path]) -> list[str]:
         reference_chunks: list[str] = []
         for reference_path in reference_paths:
             path = Path(reference_path)
@@ -97,61 +111,68 @@ class KnowledgeContextProvider:
                 text = path.read_text(encoding="utf-8")
             except Exception:
                 continue
-            normalized = " ".join(text.split()).strip()
+            normalized = self._normalize_text(text)
             if normalized:
-                reference_chunks.append(
-                    f"[{path.name}] {normalized[: self.max_chars_per_reference]}"
-                )
-        retrieved_lines: list[str] = []
-        evidence_lines: list[str] = []
-        total_chars = 0
-        total_evidence_chars = 0
-        sorted_chunks = sorted(
+                reference_chunks.append(f"[{path.name}] {normalized[: self.max_chars_per_reference]}")
+        return reference_chunks
+
+    def _sort_retrieved_chunks(self, retrieved_chunks: Iterable[RetrievedChunk]) -> list[RetrievedChunk]:
+        return sorted(
             retrieved_chunks,
             key=lambda chunk: (0 if str(chunk.chunk_kind or "") == "table_summary" else 1, -(chunk.score or 0.0)),
         )
+
+    def _format_retrieved_context(self, sorted_chunks: Iterable[RetrievedChunk]) -> str:
+        lines: list[str] = []
+        total_chars = 0
         for chunk in sorted_chunks:
-            source_label = chunk.source_name or "unknown"
-            if chunk.page_number is not None:
-                source_label = f"{source_label} | page {chunk.page_number}"
-            if chunk.table_id:
-                source_label = f"{source_label} | {chunk.table_id}"
-            elif chunk.section_title:
-                source_label = f"{source_label} | {chunk.section_title}"
-            excerpt = " ".join(str(chunk.text or "").split()).strip()
+            excerpt = self._normalize_text(chunk.text)
             if not excerpt:
                 continue
-            line = f"[{source_label}] {excerpt}"
-            remaining = self.max_retrieved_chars - total_chars
-            if remaining <= 0:
+            line = f"[{self._source_label(chunk)}] {excerpt}"
+            line, total_chars = self._append_bounded_line(line, total_chars)
+            if not line:
                 break
-            if len(line) > remaining:
-                line = line[:remaining].rstrip() + " ..."
-            retrieved_lines.append(line)
-            total_chars += len(line)
+            lines.append(line)
             if total_chars >= self.max_retrieved_chars:
                 break
+        return "\n".join(lines).strip()
+
+    def _format_evidence_register(self, sorted_chunks: Iterable[RetrievedChunk]) -> str:
+        lines: list[str] = []
+        total_chars = 0
         for chunk in sorted_chunks:
-            excerpt = " ".join(str(chunk.text or "").split()).strip()
+            excerpt = self._normalize_text(chunk.text)
             if not excerpt:
                 continue
             line = f"{chunk.evidence_id} -> {chunk.citation_label} -> {excerpt}"
-            remaining = self.max_retrieved_chars - total_evidence_chars
-            if remaining <= 0:
+            line, total_chars = self._append_bounded_line(line, total_chars)
+            if not line:
                 break
-            if len(line) > remaining:
-                line = line[:remaining].rstrip() + " ..."
-            evidence_lines.append(line)
-            total_evidence_chars += len(line)
-            if total_evidence_chars >= self.max_retrieved_chars:
+            lines.append(line)
+            if total_chars >= self.max_retrieved_chars:
                 break
+        return "\n".join(lines).strip()
 
-        return KnowledgeContextBundle(
-            background_context=data_context.background_literature_context,
-            user_context=str(user_query or "").strip(),
-            success_memory_context=str(success_memory_context or "").strip(),
-            failure_memory_context=str(failure_memory_context or "").strip(),
-            reference_context="\n".join(reference_chunks).strip(),
-            retrieved_context="\n".join(retrieved_lines).strip(),
-            retrieved_evidence_register="\n".join(evidence_lines).strip(),
-        )
+    def _append_bounded_line(self, line: str, total_chars: int) -> tuple[str, int]:
+        remaining = self.max_retrieved_chars - total_chars
+        if remaining <= 0:
+            return "", total_chars
+        if len(line) > remaining:
+            line = line[:remaining].rstrip() + " ..."
+        return line, total_chars + len(line)
+
+    @staticmethod
+    def _normalize_text(value: object) -> str:
+        return " ".join(str(value or "").split()).strip()
+
+    @staticmethod
+    def _source_label(chunk: RetrievedChunk) -> str:
+        source_label = chunk.source_name or "unknown"
+        if chunk.page_number is not None:
+            source_label = f"{source_label} | page {chunk.page_number}"
+        if chunk.table_id:
+            source_label = f"{source_label} | {chunk.table_id}"
+        elif chunk.section_title:
+            source_label = f"{source_label} | {chunk.section_title}"
+        return source_label
