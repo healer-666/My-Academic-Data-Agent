@@ -199,8 +199,8 @@ pip install -r requirements.txt
 在项目根目录创建 `.env` 文件：
 
 ```env
-LLM_MODEL_ID=deepseek-v4-flash
-LLM_BASE_URL=https://api.deepseek.com/v1
+LLM_MODEL_ID=mimo-v2.5
+LLM_BASE_URL=https://token-plan-cn.xiaomimimo.com/anthropic
 LLM_API_KEY=your_api_key_here
 LLM_TIMEOUT=120
 
@@ -220,7 +220,7 @@ VISION_LLM_API_KEY=your_vision_api_key
 VISION_LLM_TIMEOUT=120
 ```
 
-DeepSeek 文本调用会统一落到 `deepseek-v4-flash`，并在请求中显式关闭 thinking；即使环境变量误写成 `deepseek-chat`、`deepseek-reasoner` 或 `deepseek-v4-pro`，运行时也会归一化为 Flash。
+主文本模型当前示例使用小米 MiMo 的 Anthropic Messages 兼容接口。若改回 DeepSeek endpoint，运行时仍会把 `deepseek-chat`、`deepseek-reasoner` 或 `deepseek-v4-pro` 等 DeepSeek 文本模型归一化到 `deepseek-v4-flash`，并显式关闭 thinking。
 
 ### 命令行运行
 分析表格：

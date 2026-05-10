@@ -12,7 +12,7 @@ if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
 from data_analysis_agent.config import RuntimeConfig
-from data_analysis_agent.llm import build_llm
+from data_analysis_agent.llm import AnthropicMessagesLLM, build_llm
 
 
 class FakeHelloAgentsLLM:
@@ -55,6 +55,36 @@ class LLMTests(unittest.TestCase):
             llm.invoke([{"role": "user", "content": "ping"}])
 
         self.assertEqual(llm._llm.invoke_kwargs, {})
+
+    def test_build_llm_uses_anthropic_messages_adapter_for_mimo_endpoint(self):
+        llm = build_llm(
+            RuntimeConfig(
+                model_id="mimo-v2.5",
+                api_key="demo-key",
+                base_url="https://token-plan-cn.xiaomimimo.com/anthropic",
+            )
+        )
+
+        self.assertIsInstance(llm._llm, AnthropicMessagesLLM)
+        self.assertEqual(llm.default_invoke_kwargs, {"thinking": {"type": "disabled"}})
+
+    def test_anthropic_messages_adapter_converts_system_message(self):
+        system, messages = AnthropicMessagesLLM._convert_messages(
+            [
+                {"role": "system", "content": "system guardrails"},
+                {"role": "user", "content": "ping"},
+                {"role": "assistant", "content": "pong"},
+            ]
+        )
+
+        self.assertEqual(system, "system guardrails")
+        self.assertEqual(
+            messages,
+            [
+                {"role": "user", "content": "ping"},
+                {"role": "assistant", "content": "pong"},
+            ],
+        )
 
 
 if __name__ == "__main__":

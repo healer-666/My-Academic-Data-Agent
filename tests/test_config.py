@@ -82,6 +82,18 @@ class ConfigTests(unittest.TestCase):
 
         self.assertEqual(config.model_id, DEEPSEEK_FLASH_MODEL_ID)
 
+    def test_load_runtime_config_keeps_mimo_model_for_anthropic_endpoint(self):
+        env = {
+            "LLM_MODEL_ID": "mimo-v2.5",
+            "LLM_API_KEY": "demo-key",
+            "LLM_BASE_URL": "https://token-plan-cn.xiaomimimo.com/anthropic",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            config = load_runtime_config(env_file=PROJECT_ROOT / ".env.test.missing")
+
+        self.assertEqual(config.model_id, "mimo-v2.5")
+        self.assertTrue(config.anthropic_messages_configured)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -61,9 +61,18 @@ class RuntimeConfig:
     def deepseek_flash_configured(self) -> bool:
         return is_deepseek_base_url(self.base_url) and self.model_id == DEEPSEEK_FLASH_MODEL_ID
 
+    @property
+    def anthropic_messages_configured(self) -> bool:
+        return is_anthropic_messages_base_url(self.base_url)
+
 
 def is_deepseek_base_url(base_url: str | None) -> bool:
     return "api.deepseek.com" in str(base_url or "").lower()
+
+
+def is_anthropic_messages_base_url(base_url: str | None) -> bool:
+    normalized = str(base_url or "").strip().lower().rstrip("/")
+    return normalized.endswith("/anthropic") or normalized.endswith("/anthropic/v1")
 
 
 def resolve_text_model_id(model_id: str, base_url: str) -> str:
