@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import zipfile
 from pathlib import Path
 
 
@@ -27,6 +28,17 @@ def count_gt_dirs(root: Path) -> int:
     if not root.exists():
         return 0
     return sum(1 for path in root.rglob("gt") if path.is_dir())
+
+
+def extract_ground_truth_zip(root: Path) -> Path | None:
+    zip_path = root / "DataSciBench_GroundTruth_Data.zip"
+    if not zip_path.exists():
+        return None
+    output_dir = root / "extracted_ground_truth"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(zip_path) as archive:
+        archive.extractall(output_dir)
+    return output_dir
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -67,8 +79,11 @@ def main() -> int:
     except HfHubHTTPError as exc:
         raise SystemExit(f"HuggingFace download failed: {exc}") from exc
 
+    extracted = extract_ground_truth_zip(Path(path))
     gt_count = count_gt_dirs(Path(path))
     print(f"Downloaded to: {path}")
+    if extracted is not None:
+        print(f"Extracted ground truth to: {extracted}")
     print(f"GT directory count: {gt_count}")
     if gt_count == 0:
         print("WARNING: no `gt` directories found; verify the dataset layout before official TFC scoring.")

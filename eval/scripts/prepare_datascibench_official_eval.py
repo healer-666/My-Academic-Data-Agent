@@ -230,7 +230,7 @@ def _extract_task_func_code_from_text(text: str) -> str:
 
 def extract_task_func_code(trace_path: Path, raw_report_path: Path | None = None) -> str:
     texts: list[str] = []
-    if trace_path.exists():
+    if str(trace_path) not in {"", "."} and trace_path.exists() and trace_path.is_file():
         try:
             payload = _load_json(trace_path)
             texts.extend(text for text in _iter_strings(payload) if "def task_func" in text)
@@ -325,6 +325,8 @@ def stage_regular_output(record: dict[str, Any], config: OfficialEvalConfig) -> 
 
 def _find_gt_source(hf_root: Path, task_id: str) -> Path | None:
     candidates = [
+        hf_root / "extracted_ground_truth" / "gt_data" / task_id / "gt",
+        hf_root / "gt_data" / task_id / "gt",
         hf_root / "data" / task_id / "gt",
         hf_root / task_id / "gt",
         hf_root / "gt" / task_id,
@@ -336,6 +338,42 @@ def _find_gt_source(hf_root: Path, task_id: str) -> Path | None:
         if candidate.is_dir() and candidate.parent.name == task_id:
             return candidate
     return None
+
+
+def _find_task_data_source(hf_root: Path, task_id: str) -> Path | None:
+    candidates = [
+        hf_root / "DataSciBench-data" / task_id,
+        hf_root / "data" / task_id,
+        hf_root / task_id,
+    ]
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_dir():
+            return candidate
+    return None
+
+
+def sync_task_data(config: OfficialEvalConfig, task_ids: Iterable[str]) -> dict[str, list[str]]:
+    if config.hf_root is None or not config.hf_root.exists():
+        return {}
+    synced: dict[str, list[str]] = {}
+    for task_id in task_ids:
+        if _is_bcb_task(task_id):
+            continue
+        source = _find_task_data_source(config.hf_root, task_id)
+        if source is None:
+            continue
+        target = config.official_root / "data" / task_id
+        target.mkdir(parents=True, exist_ok=True)
+        copied: list[str] = []
+        for path in source.rglob("*"):
+            if not path.is_file() or path.name.startswith("._") or "__MACOSX" in path.parts:
+                continue
+            relative = path.relative_to(source)
+            destination = target / relative
+            _copy_file(path, destination)
+            copied.append(destination.as_posix())
+        synced[task_id] = copied
+    return synced
 
 
 def sync_ground_truth(config: OfficialEvalConfig, task_ids: Iterable[str]) -> dict[str, str]:
@@ -357,13 +395,15 @@ def sync_ground_truth(config: OfficialEvalConfig, task_ids: Iterable[str]) -> di
 
 
 def _run_command(command: list[str], *, cwd: Path, timeout_seconds: int) -> subprocess.CompletedProcess[str]:
-    env = {**os.environ, "MPLBACKEND": "Agg"}
+    env = {**os.environ, "MPLBACKEND": "Agg", "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
     try:
         return subprocess.run(
             command,
             cwd=cwd,
             text=True,
             capture_output=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout_seconds,
             check=False,
             env=env,
@@ -443,8 +483,8 @@ def run_official_evaluator(config: OfficialEvalConfig, prepared: dict[str, Any],
         parsed = _parse_regular_result(config, task_id, report_dir) if result.returncode == 0 else {"official_score_status": "evaluator_failed"}
     stdout_path = log_dir / f"{task_id}_{prefix}_stdout.txt"
     stderr_path = log_dir / f"{task_id}_{prefix}_stderr.txt"
-    stdout_path.write_text(result.stdout, encoding="utf-8", errors="ignore")
-    stderr_path.write_text(result.stderr, encoding="utf-8", errors="ignore")
+    stdout_path.write_text(result.stdout or "", encoding="utf-8", errors="ignore")
+    stderr_path.write_text(result.stderr or "", encoding="utf-8", errors="ignore")
     return {
         **parsed,
         "official_evaluator_returncode": result.returncode,
@@ -488,7 +528,9 @@ def prepare_and_optionally_score(config: OfficialEvalConfig) -> dict[str, Any]:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     report_dir = config.reports_dir / timestamp
     report_dir.mkdir(parents=True, exist_ok=True)
-    synced_gt = sync_ground_truth(config, [str(record.get("id")) for record in records])
+    task_ids = [str(record.get("id")) for record in records]
+    synced_task_data = sync_task_data(config, task_ids)
+    synced_gt = sync_ground_truth(config, task_ids)
     prepared_records: list[dict[str, Any]] = []
     for record in records:
         task_id = str(record.get("id"))
@@ -509,6 +551,7 @@ def prepare_and_optionally_score(config: OfficialEvalConfig) -> dict[str, Any]:
         "run_id": config.run_id,
         "run_official_eval": config.run_official_eval,
         "synced_ground_truth": synced_gt,
+        "synced_task_data": synced_task_data,
         "prepared_count": sum(1 for item in prepared_records if item.get("official_prepare_status") == "prepared"),
         "scored_count": sum(1 for item in prepared_records if item.get("official_score_status") == "scored"),
         "unsupported_count": sum(1 for item in prepared_records if str(item.get("official_prepare_status", "")).startswith("unsupported")),
