@@ -18,3 +18,5 @@ Co-creation-projects/
 .claude/
 data/external/dabench/
 data/external/datascibench/
+data/external/datascibench_hf/
+data/external/datascibench_official/
