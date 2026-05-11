@@ -64,6 +64,13 @@ To score non-BCB TFC tasks, download the HuggingFace evaluation data into:
 
 Expected effect: the bridge will sync `gt` folders into `data/external/datascibench_official/data/{task_id}/gt/` and then invoke the official `experiments.evaluate` scorer.
 
+Authenticated download helper:
+
+```powershell
+$env:HF_TOKEN = "<your HuggingFace token with dataset access>"
+& 'D:\anaconda\envs\agent_env\python.exe' eval\scripts\download_datascibench_hf.py --output-dir data\external\datascibench_hf
+```
+
 ## Commands
 
 Prepare or score an existing Academic-Data-Agent run:
