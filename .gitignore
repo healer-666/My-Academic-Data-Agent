@@ -16,3 +16,5 @@ logs/
 Co-creation-projects/
 
 .claude/
+data/external/dabench/
+data/external/datascibench/

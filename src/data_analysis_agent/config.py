@@ -133,9 +133,9 @@ def load_runtime_config(env_file: Optional[str | Path] = None) -> RuntimeConfig:
     """Load and validate runtime configuration from the environment."""
 
     if env_file is not None:
-        load_dotenv(dotenv_path=env_file, override=False)
+        load_dotenv(dotenv_path=env_file, override=False, encoding="utf-8-sig")
     else:
-        load_dotenv(override=False)
+        load_dotenv(override=False, encoding="utf-8-sig")
 
     required_env_vars = ("LLM_MODEL_ID", "LLM_BASE_URL", "LLM_API_KEY")
     missing_env_vars = [name for name in required_env_vars if not os.getenv(name)]

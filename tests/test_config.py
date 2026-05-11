@@ -12,6 +12,7 @@ SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
+import data_analysis_agent.config as config_module
 from data_analysis_agent.config import DEEPSEEK_FLASH_MODEL_ID, load_runtime_config
 
 
@@ -93,6 +94,23 @@ class ConfigTests(unittest.TestCase):
 
         self.assertEqual(config.model_id, "mimo-v2.5")
         self.assertTrue(config.anthropic_messages_configured)
+
+    def test_load_runtime_config_accepts_utf8_sig_env_files(self):
+        if config_module.load_dotenv.__module__ == config_module.__name__:
+            self.skipTest("python-dotenv is not installed in this interpreter")
+        env_path = PROJECT_ROOT / "tool-output" / "test-temp" / "bom_env.env"
+        env_path.parent.mkdir(parents=True, exist_ok=True)
+        env_path.write_text(
+            "LLM_MODEL_ID=mimo-v2.5\n"
+            "LLM_API_KEY=demo-key\n"
+            "LLM_BASE_URL=https://token-plan-cn.xiaomimimo.com/anthropic\n",
+            encoding="utf-8-sig",
+        )
+
+        with patch.dict(os.environ, {}, clear=True):
+            config = load_runtime_config(env_file=env_path)
+
+        self.assertEqual(config.model_id, "mimo-v2.5")
 
 
 if __name__ == "__main__":
